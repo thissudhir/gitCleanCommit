@@ -14,64 +14,85 @@ interface CommitType {
 
 const COMMIT_TYPES: CommitType[] = [
   {
-    name: "Feature     - A new feature",
-    value: "feat",
+    name: "FEATURE      - A new feature",
+    value: "FEATURE",
     color: "green",
     emoji: "🚀",
     description: "A new feature",
   },
   {
-    name: "🐛 fix      - A bug fix",
-    value: "fix",
+    name: "ADD          - Add new code or files",
+    value: "ADD",
+    color: "redBright",
+    emoji: "🔥",
+    description: "Added new code or files",
+  },
+  {
+    name: "FIX          - A bug fix",
+    value: "FIX",
     color: "red",
     emoji: "🐛",
     description: "A bug fix",
   },
   {
-    name: "📚 docs     - Documentation changes",
-    value: "docs",
+    name: "MODIFY       - Modify a file or code",
+    value: "MODIFY",
+    color: "red",
+    emoji: "🐛",
+    description: "Modified a file or code",
+  },
+  {
+    name: "UPDATE       - Updated a file or code",
+    value: "UPDATE",
+    color: "red",
+    emoji: "🐛",
+    description: "Updated a file or code",
+  },
+  {
+    name: "DOCS         - Documentation changes",
+    value: "DOCS",
     color: "blue",
     emoji: "📚",
     description: "Documentation only changes",
   },
   {
-    name: "💄 style    - Code style changes",
-    value: "style",
+    name: "STYLE        - Code style changes",
+    value: "STYLE",
     color: "magenta",
     emoji: "💄",
     description: "Changes that do not affect the meaning of the code",
   },
   {
-    name: "♻️  refactor - Code refactoring",
-    value: "refactor",
+    name: "REFACTOR     - Code refactoring",
+    value: "REFACTOR",
     color: "yellow",
     emoji: "♻️",
     description: "A code change that neither fixes a bug nor adds a feature",
   },
   {
-    name: "✅ test     - Adding tests",
-    value: "test",
+    name: "TEST         - Adding tests",
+    value: "TEST",
     color: "cyan",
     emoji: "✅",
     description: "Adding missing tests or correcting existing tests",
   },
   {
-    name: "🔧 chore    - Maintenance tasks",
-    value: "chore",
+    name: "CHORE        - Maintenance tasks",
+    value: "CHORE",
     color: "gray",
     emoji: "🔧",
     description: "Other changes that don't modify src or test files",
   },
   {
-    name: "⚡ perf     - Performance improvements",
-    value: "perf",
+    name: "PERFORMANCE  - Performance improvements",
+    value: "PERFORMANCE",
     color: "greenBright",
     emoji: "⚡",
     description: "A code change that improves performance",
   },
   {
-    name: "🔥 remove   - Removing code or files",
-    value: "remove",
+    name: "REMOVE       - Removing code or files",
+    value: "REMOVE",
     color: "redBright",
     emoji: "🔥",
     description: "Removing code or files",
@@ -198,9 +219,9 @@ export async function promptCommit(hookFile?: string): Promise<void> {
   );
 
   if (answers.body) {
-    console.log(
-      "│                                                                               │"
-    );
+    // console.log(
+    //   "│                                                                               │"
+    // );
     const bodyLines = answers.body.split("\n");
     bodyLines.forEach((line: string) => {
       console.log(`│ ${chalk.gray(line).padEnd(75)} │`);
@@ -208,18 +229,18 @@ export async function promptCommit(hookFile?: string): Promise<void> {
   }
 
   if (answers.breaking) {
-    console.log(
-      "│                                                                               │"
-    );
+    // console.log(
+    //   "│                                                                               │"
+    // );
     console.log(
       `│ ${chalk.red.bold("💥 BREAKING CHANGE: " + answers.message).padEnd(75)} │`
     );
   }
 
   if (answers.issues) {
-    console.log(
-      "│                                                                               │"
-    );
+    // console.log(
+    //   "│                                                                               │"
+    // );
     console.log(`│ ${chalk.blue(answers.issues).padEnd(75)} │`);
   }
 

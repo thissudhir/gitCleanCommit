@@ -3,7 +3,7 @@ import chalk from "chalk";
 
 export function showBanner(): void {
   console.log(
-    chalk.cyan(
+    chalk.whiteBright(
       figlet.textSync("GitClean", {
         font: "ANSI Shadow",
         horizontalLayout: "default",

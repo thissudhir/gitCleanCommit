@@ -3,6 +3,12 @@ import { writeFileSync, readFileSync, existsSync, chmodSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
 
+// Helper function to safely get error message
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
 export function findGitRoot(): string {
   try {
     const gitRoot = execSync("git rev-parse --show-toplevel", {
@@ -55,6 +61,22 @@ export async function removeGitHook(): Promise<void> {
   }
 }
 
+export function executeGitAdd(files: string[] = ["."]): void {
+  try {
+    const args = ["add", ...files];
+
+    console.log(chalk.blue(`📁 Adding files: ${files.join(", ")}`));
+    execSync(`git ${args.join(" ")}`, { stdio: "inherit" });
+    console.log(chalk.green("✅ Files added successfully!"));
+  } catch (error) {
+    console.error(
+      chalk.red("Failed to execute git add:"),
+      getErrorMessage(error)
+    );
+    throw error;
+  }
+}
+
 export function executeGitCommit(message: string, body?: string): void {
   try {
     const args = ["commit", "-m", message];
@@ -71,6 +93,76 @@ export function executeGitCommit(message: string, body?: string): void {
       }
     });
   } catch (error) {
-    console.error(chalk.red("Failed to execute git commit:"), error);
+    console.error(
+      chalk.red("Failed to execute git commit:"),
+      getErrorMessage(error)
+    );
+  }
+}
+
+export async function executeGitAddAndCommit(
+  files: string[] = ["."],
+  commitMessage?: string,
+  commitBody?: string
+): Promise<void> {
+  try {
+    // First, add the files
+    executeGitAdd(files);
+
+    // Then proceed with the commit
+    if (commitMessage) {
+      // If message is provided, commit directly
+      executeGitCommit(commitMessage, commitBody);
+    } else {
+      // If no message provided, this will trigger the GitClean prompt
+      // through the prepare-commit-msg hook
+      console.log(chalk.blue("\n🚀 Opening GitClean commit prompt..."));
+      executeGitCommit(""); // Empty message will trigger the hook
+    }
+  } catch (error) {
+    console.error(
+      chalk.red("Failed to execute git add and commit:"),
+      getErrorMessage(error)
+    );
+  }
+}
+
+export function checkWorkingDirectory(): {
+  hasChanges: boolean;
+  hasStagedFiles: boolean;
+} {
+  try {
+    // Check for unstaged changes
+    const unstagedChanges = execSync("git diff --name-only", {
+      encoding: "utf8",
+    }).trim();
+
+    // Check for staged changes
+    const stagedChanges = execSync("git diff --cached --name-only", {
+      encoding: "utf8",
+    }).trim();
+
+    return {
+      hasChanges: unstagedChanges.length > 0,
+      hasStagedFiles: stagedChanges.length > 0,
+    };
+  } catch (error) {
+    console.error(
+      chalk.red("Failed to check working directory:"),
+      getErrorMessage(error)
+    );
+    return { hasChanges: false, hasStagedFiles: false };
+  }
+}
+
+export function getGitStatus(): string {
+  try {
+    return execSync("git status --porcelain", { encoding: "utf8" });
+  } catch (error) {
+    console.error(
+      chalk.red("Failed to get git status:"),
+      getErrorMessage(error)
+    );
+    return "";
   }
 }
