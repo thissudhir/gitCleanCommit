@@ -1,7 +1,7 @@
 import inquirer from "inquirer";
 import chalk from "chalk";
 import { checkSpelling } from "./spellcheck.js";
-import { executeGitCommit } from "./git-integration.js";
+import { executeFullGitWorkflow } from "./git-integration.js";
 import { writeFileSync } from "fs";
 
 interface CommitType {
@@ -13,18 +13,11 @@ interface CommitType {
 }
 
 const COMMIT_TYPES: CommitType[] = [
-  // {
-  //   name: "FEATURE      - A new feature",
-  //   value: "FEATURE",
-  //   color: "green",
-  //   emoji: "🚀",
-  //   description: "A new feature",
-  // },
   {
     name: "ADD          - Add new code or files",
     value: "ADD",
-    color: "redBright",
-    emoji: "🔥",
+    color: "green",
+    emoji: "➕",
     description: "Added new code or files",
   },
   {
@@ -34,18 +27,11 @@ const COMMIT_TYPES: CommitType[] = [
     emoji: "🐛",
     description: "A bug fix",
   },
-  // {
-  //   name: "MODIFY       - Modify a file or code",
-  //   value: "MODIFY",
-  //   color: "red",
-  //   emoji: "🐛",
-  //   description: "Modified a file or code",
-  // },
   {
     name: "UPDATE       - Updated a file or code",
     value: "UPDATE",
-    color: "red",
-    emoji: "🐛",
+    color: "yellow",
+    emoji: "🔄",
     description: "Updated a file or code",
   },
   {
@@ -55,20 +41,6 @@ const COMMIT_TYPES: CommitType[] = [
     emoji: "📚",
     description: "Documentation only changes",
   },
-  // {
-  //   name: "STYLE        - Code style changes",
-  //   value: "STYLE",
-  //   color: "magenta",
-  //   emoji: "💄",
-  //   description: "Changes that do not affect the meaning of the code",
-  // },
-  // {
-  //   name: "REFACTOR     - Code refactoring",
-  //   value: "REFACTOR",
-  //   color: "yellow",
-  //   emoji: "♻️",
-  //   description: "A code change that neither fixes a bug nor adds a feature",
-  // },
   {
     name: "TEST         - Adding tests",
     value: "TEST",
@@ -76,38 +48,22 @@ const COMMIT_TYPES: CommitType[] = [
     emoji: "✅",
     description: "Adding missing tests or correcting existing tests",
   },
-  // {
-  //   name: "CHORE        - Maintenance tasks",
-  //   value: "CHORE",
-  //   color: "gray",
-  //   emoji: "🔧",
-  //   description: "Other changes that don't modify src or test files",
-  // },
-  // {
-  //   name: "PERFORMANCE  - Performance improvements",
-  //   value: "PERFORMANCE",
-  //   color: "greenBright",
-  //   emoji: "⚡",
-  //   description: "A code change that improves performance",
-  // },
-  // {
-  //   name: "REMOVE       - Removing code or files",
-  //   value: "REMOVE",
-  //   color: "redBright",
-  //   emoji: "🔥",
-  //   description: "Removing code or files",
-  // },
+  {
+    name: "REMOVE       - Removing code or files",
+    value: "REMOVE",
+    color: "redBright",
+    emoji: "🗑️",
+    description: "Removing code or files",
+  },
 ];
 
 function createSquigglyUnderline(text: string, typos: string[]): string {
   let result = text;
 
   for (const typo of typos) {
-    // Create a regex to find the typo with word boundaries
     const regex = new RegExp(`\\b${typo}\\b`, "gi");
     result = result.replace(regex, (match) => {
-      // Create squiggly underline using combining characters
-      const squiggly = "\u0330".repeat(match.length); // Combining tilde below
+      const squiggly = "\u0330".repeat(match.length);
       return chalk.red(match + squiggly);
     });
   }
@@ -137,7 +93,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         value: type.value,
         short: type.emoji + " " + type.value,
       })),
-      pageSize: 15,
+      pageSize: 10,
     },
     {
       name: "scope",
@@ -219,9 +175,6 @@ export async function promptCommit(hookFile?: string): Promise<void> {
   );
 
   if (answers.body) {
-    // console.log(
-    //   "│                                                                               │"
-    // );
     const bodyLines = answers.body.split("\n");
     bodyLines.forEach((line: string) => {
       console.log(`│ ${chalk.gray(line).padEnd(75)} │`);
@@ -229,18 +182,12 @@ export async function promptCommit(hookFile?: string): Promise<void> {
   }
 
   if (answers.breaking) {
-    // console.log(
-    //   "│                                                                               │"
-    // );
     console.log(
       `│ ${chalk.red.bold("💥 BREAKING CHANGE: " + answers.message).padEnd(75)} │`
     );
   }
 
   if (answers.issues) {
-    // console.log(
-    //   "│                                                                               │"
-    // );
     console.log(`│ ${chalk.blue(answers.issues).padEnd(75)} │`);
   }
 
@@ -273,7 +220,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       message:
         allTypos.length > 0
           ? "Do you want to proceed with this commit despite potential spelling issues?"
-          : "Looks good! Create this commit?",
+          : "Ready to add, commit, and push? (This will run: git add . → git commit → git push)",
       default: allTypos.length === 0,
     },
   ]);
@@ -282,16 +229,20 @@ export async function promptCommit(hookFile?: string): Promise<void> {
     if (hookFile) {
       // Write to the commit message file for git hook
       writeFileSync(hookFile, fullCommit);
+      console.log(chalk.green("\n✅ Commit message created successfully!"));
     } else {
-      // Execute git commit directly
-      executeGitCommit(commitHeader, answers.body);
+      // Execute the full git workflow: add, commit, and push
+      try {
+        await executeFullGitWorkflow(commitHeader, answers.body);
+      } catch (error) {
+        console.error(chalk.red("\n❌ Failed to complete git workflow"));
+        process.exit(1);
+      }
     }
-
-    console.log(chalk.green("\n✅ Commit message created successfully!"));
   } else {
     console.log(
       chalk.yellow(
-        "\n❌ Commit cancelled. Run the command again to create a new message."
+        "\n❌ Operation cancelled. Run the command again to try again."
       )
     );
     process.exit(1);

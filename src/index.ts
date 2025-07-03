@@ -3,7 +3,11 @@
 import { Command } from "commander";
 import { showBanner } from "./banner.js";
 import { promptCommit } from "./prompt.js";
-import { setupGitHook, removeGitHook } from "./git-integration.js";
+import {
+  setupGitHook,
+  removeGitHook,
+  getGitStatus,
+} from "./git-integration.js";
 import chalk from "chalk";
 
 // Helper function to safely get error message
@@ -62,10 +66,36 @@ program
     await promptCommit(options.hook);
   });
 
+program
+  .command("status")
+  .alias("s")
+  .description("Show git status")
+  .action(() => {
+    const status = getGitStatus();
+    if (status.trim()) {
+      console.log(chalk.blue("📋 Git Status:"));
+      console.log(status);
+    } else {
+      console.log(chalk.green("✅ Working directory clean"));
+    }
+  });
+
 // Default action - show banner and prompt for commit
-program.action(() => {
+program.action(async () => {
   showBanner();
-  promptCommit();
+
+  // Check if there are any changes to commit
+  const status = getGitStatus();
+  if (!status.trim()) {
+    console.log(chalk.yellow("⚠️  No changes to commit"));
+    console.log(chalk.dim("Make some changes and run `gitclean` again"));
+    return;
+  }
+
+  console.log(chalk.blue("🔍 Found changes to commit"));
+  console.log(chalk.dim("This will: git add . → git commit → git push\n"));
+
+  await promptCommit();
 });
 
 program.parse();

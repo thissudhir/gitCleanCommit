@@ -2,6 +2,7 @@ import { execSync, spawn } from "child_process";
 import { writeFileSync, readFileSync, existsSync, chmodSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
+import ora from "ora";
 
 // Helper function to safely get error message
 function getErrorMessage(error: unknown): string {
@@ -17,6 +18,17 @@ export function findGitRoot(): string {
     return gitRoot;
   } catch (error) {
     throw new Error("Not in a git repository");
+  }
+}
+
+export function getCurrentBranch(): string {
+  try {
+    const branch = execSync("git rev-parse --abbrev-ref HEAD", {
+      encoding: "utf8",
+    }).trim();
+    return branch;
+  } catch (error) {
+    throw new Error("Failed to get current branch");
   }
 }
 
@@ -62,68 +74,119 @@ export async function removeGitHook(): Promise<void> {
 }
 
 export function executeGitAdd(files: string[] = ["."]): void {
+  const spinner = ora("Adding files...").start();
   try {
     const args = ["add", ...files];
-
-    console.log(chalk.blue(`📁 Adding files: ${files.join(", ")}`));
-    execSync(`git ${args.join(" ")}`, { stdio: "inherit" });
-    console.log(chalk.green("✅ Files added successfully!"));
+    execSync(`git ${args.join(" ")}`, { stdio: "pipe" });
+    spinner.succeed(`Files added: ${files.join(", ")}`);
   } catch (error) {
-    console.error(
-      chalk.red("Failed to execute git add:"),
-      getErrorMessage(error)
-    );
+    spinner.fail("Failed to add files");
     throw error;
   }
 }
 
-export function executeGitCommit(message: string, body?: string): void {
-  try {
-    const args = ["commit", "-m", message];
-    if (body) {
-      args.push("-m", body);
-    }
+export function executeGitCommit(
+  message: string,
+  body?: string
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const spinner = ora("Creating commit...").start();
 
-    const result = spawn("git", args, { stdio: "inherit" });
-    result.on("close", (code) => {
-      if (code === 0) {
-        console.log(chalk.green("\n✅ Commit created successfully!"));
-      } else {
-        console.log(chalk.red("\n❌ Commit failed"));
+    try {
+      const args = ["commit", "-m", message];
+      if (body) {
+        args.push("-m", body);
       }
-    });
-  } catch (error) {
-    console.error(
-      chalk.red("Failed to execute git commit:"),
-      getErrorMessage(error)
-    );
-  }
+
+      const result = spawn("git", args, { stdio: "pipe" });
+
+      result.on("close", (code) => {
+        if (code === 0) {
+          spinner.succeed("Commit created successfully!");
+          resolve();
+        } else {
+          spinner.fail("Commit failed");
+          reject(new Error("Commit failed"));
+        }
+      });
+
+      result.on("error", (error) => {
+        spinner.fail("Commit failed");
+        reject(error);
+      });
+    } catch (error) {
+      spinner.fail("Commit failed");
+      reject(error);
+    }
+  });
 }
 
-export async function executeGitAddAndCommit(
-  files: string[] = ["."],
-  commitMessage?: string,
-  commitBody?: string
+export function executeGitPush(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const spinner = ora("Pushing to remote...").start();
+
+    try {
+      const branch = getCurrentBranch();
+      const result = spawn("git", ["push", "origin", branch], {
+        stdio: "pipe",
+      });
+
+      result.on("close", (code) => {
+        if (code === 0) {
+          spinner.succeed(`Pushed to ${branch} successfully!`);
+          resolve();
+        } else {
+          spinner.fail("Push failed");
+          reject(new Error("Push failed"));
+        }
+      });
+
+      result.on("error", (error) => {
+        spinner.fail("Push failed");
+        reject(error);
+      });
+    } catch (error) {
+      spinner.fail("Push failed");
+      reject(error);
+    }
+  });
+}
+
+export async function executeFullGitWorkflow(
+  commitMessage: string,
+  commitBody?: string,
+  files: string[] = ["."]
 ): Promise<void> {
   try {
-    // First, add the files
+    // Check if we're in a git repository
+    findGitRoot();
+
+    // Check if there are any changes to commit
+    const status = getGitStatus();
+    if (!status.trim()) {
+      console.log(chalk.yellow("⚠️  No changes to commit"));
+      return;
+    }
+
+    console.log(chalk.blue("\n🚀 Starting GitClean workflow...\n"));
+
+    // Step 1: Add files
     executeGitAdd(files);
 
-    // Then proceed with the commit
-    if (commitMessage) {
-      // If message is provided, commit directly
-      executeGitCommit(commitMessage, commitBody);
-    } else {
-      // If no message provided, this will trigger the GitClean prompt
-      // through the prepare-commit-msg hook
-      console.log(chalk.blue("\n🚀 Opening GitClean commit prompt..."));
-      executeGitCommit(""); // Empty message will trigger the hook
-    }
+    // Step 2: Commit
+    await executeGitCommit(commitMessage, commitBody);
+
+    // Step 3: Push
+    await executeGitPush();
+
+    console.log(chalk.green("\n✅ GitClean workflow completed successfully!"));
+    console.log(chalk.dim(`📦 Changes pushed to ${getCurrentBranch()}\n`));
   } catch (error) {
     console.error(
-      chalk.red("Failed to execute git add and commit:"),
+      chalk.red("\n❌ GitClean workflow failed:"),
       getErrorMessage(error)
     );
+    throw error;
   }
 }
 
