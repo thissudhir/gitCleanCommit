@@ -5,12 +5,6 @@ import { showBanner } from "./banner.js";
 import { promptCommit } from "./prompt.js";
 import { setupGitHook, removeGitHook } from "./git-integration.js";
 import chalk from "chalk";
-import {
-  executeGitAddAndCommit,
-  checkWorkingDirectory,
-  getGitStatus,
-  findGitRoot,
-} from "./git-integration";
 
 // Helper function to safely get error message
 function getErrorMessage(error: unknown): string {
