@@ -13,13 +13,13 @@ interface CommitType {
 }
 
 const COMMIT_TYPES: CommitType[] = [
-  {
-    name: "FEATURE      - A new feature",
-    value: "FEATURE",
-    color: "green",
-    emoji: "🚀",
-    description: "A new feature",
-  },
+  // {
+  //   name: "FEATURE      - A new feature",
+  //   value: "FEATURE",
+  //   color: "green",
+  //   emoji: "🚀",
+  //   description: "A new feature",
+  // },
   {
     name: "ADD          - Add new code or files",
     value: "ADD",
@@ -34,13 +34,13 @@ const COMMIT_TYPES: CommitType[] = [
     emoji: "🐛",
     description: "A bug fix",
   },
-  {
-    name: "MODIFY       - Modify a file or code",
-    value: "MODIFY",
-    color: "red",
-    emoji: "🐛",
-    description: "Modified a file or code",
-  },
+  // {
+  //   name: "MODIFY       - Modify a file or code",
+  //   value: "MODIFY",
+  //   color: "red",
+  //   emoji: "🐛",
+  //   description: "Modified a file or code",
+  // },
   {
     name: "UPDATE       - Updated a file or code",
     value: "UPDATE",
@@ -55,20 +55,20 @@ const COMMIT_TYPES: CommitType[] = [
     emoji: "📚",
     description: "Documentation only changes",
   },
-  {
-    name: "STYLE        - Code style changes",
-    value: "STYLE",
-    color: "magenta",
-    emoji: "💄",
-    description: "Changes that do not affect the meaning of the code",
-  },
-  {
-    name: "REFACTOR     - Code refactoring",
-    value: "REFACTOR",
-    color: "yellow",
-    emoji: "♻️",
-    description: "A code change that neither fixes a bug nor adds a feature",
-  },
+  // {
+  //   name: "STYLE        - Code style changes",
+  //   value: "STYLE",
+  //   color: "magenta",
+  //   emoji: "💄",
+  //   description: "Changes that do not affect the meaning of the code",
+  // },
+  // {
+  //   name: "REFACTOR     - Code refactoring",
+  //   value: "REFACTOR",
+  //   color: "yellow",
+  //   emoji: "♻️",
+  //   description: "A code change that neither fixes a bug nor adds a feature",
+  // },
   {
     name: "TEST         - Adding tests",
     value: "TEST",
@@ -76,27 +76,27 @@ const COMMIT_TYPES: CommitType[] = [
     emoji: "✅",
     description: "Adding missing tests or correcting existing tests",
   },
-  {
-    name: "CHORE        - Maintenance tasks",
-    value: "CHORE",
-    color: "gray",
-    emoji: "🔧",
-    description: "Other changes that don't modify src or test files",
-  },
-  {
-    name: "PERFORMANCE  - Performance improvements",
-    value: "PERFORMANCE",
-    color: "greenBright",
-    emoji: "⚡",
-    description: "A code change that improves performance",
-  },
-  {
-    name: "REMOVE       - Removing code or files",
-    value: "REMOVE",
-    color: "redBright",
-    emoji: "🔥",
-    description: "Removing code or files",
-  },
+  // {
+  //   name: "CHORE        - Maintenance tasks",
+  //   value: "CHORE",
+  //   color: "gray",
+  //   emoji: "🔧",
+  //   description: "Other changes that don't modify src or test files",
+  // },
+  // {
+  //   name: "PERFORMANCE  - Performance improvements",
+  //   value: "PERFORMANCE",
+  //   color: "greenBright",
+  //   emoji: "⚡",
+  //   description: "A code change that improves performance",
+  // },
+  // {
+  //   name: "REMOVE       - Removing code or files",
+  //   value: "REMOVE",
+  //   color: "redBright",
+  //   emoji: "🔥",
+  //   description: "Removing code or files",
+  // },
 ];
 
 function createSquigglyUnderline(text: string, typos: string[]): string {
