@@ -30,16 +30,16 @@
     "git-hooks",
     "clean-commits"
   ],
-  "author": "Your Name <your.email@example.com>",
+  "author": "Abhishek <abhishekworkhere@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/gitclean-cli.git"
+    "url": "https://github.com/thissudhir/gitCleanCommit.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/gitclean-cli/issues"
+    "url": "https://github.com/thissudhir/gitCleanCommit/issues"
   },
-  "homepage": "https://github.com/yourusername/gitclean-cli#readme",
+  "homepage": "https://github.com/thissudhir/gitCleanCommit#readme",
   "dependencies": {
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",
