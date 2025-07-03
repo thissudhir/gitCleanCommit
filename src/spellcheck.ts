@@ -1,21 +1,49 @@
 export function checkSpelling(message: string): string[] {
   const typos: string[] = [];
 
-  // Common typos dictionary - you can expand this
+  // Expanded dictionary of common programming and general typos
   const commonTypos: { [key: string]: string } = {
-    teh: "the",
+    // Programming specific
+    functionallity: "functionality",
+    conditon: "condition",
+    lenght: "length",
+    widht: "width",
+    heigth: "height",
+    commited: "committed",
+    commiting: "committing",
+    sucessful: "successful",
+    sucessfully: "successfully",
+    acording: "according",
+    compatability: "compatibility",
+    dependancy: "dependency",
     recieve: "receive",
-    occured: "occurred",
+    recieved: "received",
+    recieving: "receiving",
     seperate: "separate",
+    seperated: "separated",
+    seperately: "separately",
     definately: "definitely",
+    perfomance: "performance",
+    perfom: "perform",
+    optmize: "optimize",
+    optmized: "optimized",
+    optmization: "optimization",
+
+    // General typos
+    teh: "the",
+    hte: "the",
+    adn: "and",
+    nad: "and",
+    occured: "occurred",
+    occuring: "occurring",
     calender: "calendar",
     accomodate: "accommodate",
     achive: "achieve",
+    achived: "achieved",
     adress: "address",
     begining: "beginning",
     beleive: "believe",
-    biusiness: "business",
-    commited: "committed",
+    buiness: "business",
     diference: "difference",
     enviroment: "environment",
     excercise: "exercise",
@@ -28,19 +56,21 @@ export function checkSpelling(message: string): string[] {
     immediatly: "immediately",
     independant: "independent",
     intrested: "interested",
-    lenght: "length",
     libary: "library",
     maintainance: "maintenance",
     occassion: "occasion",
     prefered: "preferred",
     reccomend: "recommend",
-    succesful: "successful",
     thier: "their",
-    todays: "today's",
     truely: "truly",
     usualy: "usually",
     wierd: "weird",
     tasting: "testing",
+    implmentation: "implementation",
+    implimentation: "implementation",
+    documention: "documentation",
+    confguration: "configuration",
+    configuraton: "configuration",
   };
 
   // Split message into words and check each
@@ -65,6 +95,11 @@ export function getSuggestion(word: string): string | null {
     occured: "occurred",
     seperate: "separate",
     definately: "definitely",
+    commited: "committed",
+    sucessful: "successful",
+    perfomance: "performance",
+    implmentation: "implementation",
+    documention: "documentation",
   };
 
   return commonTypos[word.toLowerCase()] || null;

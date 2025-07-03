@@ -1,7 +1,8 @@
 import inquirer from "inquirer";
 import chalk from "chalk";
-import { checkSpelling } from "./spellcheck.ts";
-import { capitalize } from "./utils.ts";
+import { checkSpelling } from "./spellcheck.js";
+import { executeGitCommit } from "./git-integration.js";
+import { writeFileSync } from "fs";
 
 interface CommitType {
   name: string;
@@ -13,127 +14,147 @@ interface CommitType {
 
 const COMMIT_TYPES: CommitType[] = [
   {
-    name: "feat - A new feature",
-    value: "feat",
+    name: "FEATURE      - A new feature",
+    value: "FEATURE",
     color: "green",
     emoji: "🚀",
     description: "A new feature",
   },
   {
-    name: "🐛 fix - A bug fix",
-    value: "fix",
+    name: "ADD          - Add new code or files",
+    value: "ADD",
+    color: "redBright",
+    emoji: "🔥",
+    description: "Added new code or files",
+  },
+  {
+    name: "FIX          - A bug fix",
+    value: "FIX",
     color: "red",
     emoji: "🐛",
     description: "A bug fix",
   },
   {
-    name: "📚 docs - Documentation changes",
-    value: "docs",
+    name: "MODIFY       - Modify a file or code",
+    value: "MODIFY",
+    color: "red",
+    emoji: "🐛",
+    description: "Modified a file or code",
+  },
+  {
+    name: "UPDATE       - Updated a file or code",
+    value: "UPDATE",
+    color: "red",
+    emoji: "🐛",
+    description: "Updated a file or code",
+  },
+  {
+    name: "DOCS         - Documentation changes",
+    value: "DOCS",
     color: "blue",
     emoji: "📚",
     description: "Documentation only changes",
   },
   {
-    name: "💄 style - Code style changes",
-    value: "style",
+    name: "STYLE        - Code style changes",
+    value: "STYLE",
     color: "magenta",
     emoji: "💄",
     description: "Changes that do not affect the meaning of the code",
   },
   {
-    name: "♻️ refactor - Code refactoring",
-    value: "refactor",
+    name: "REFACTOR     - Code refactoring",
+    value: "REFACTOR",
     color: "yellow",
     emoji: "♻️",
     description: "A code change that neither fixes a bug nor adds a feature",
   },
   {
-    name: "✅ test - Adding tests",
-    value: "test",
+    name: "TEST         - Adding tests",
+    value: "TEST",
     color: "cyan",
     emoji: "✅",
     description: "Adding missing tests or correcting existing tests",
   },
   {
-    name: "🔧 chore - Maintenance tasks",
-    value: "chore",
+    name: "CHORE        - Maintenance tasks",
+    value: "CHORE",
     color: "gray",
     emoji: "🔧",
     description: "Other changes that don't modify src or test files",
   },
   {
-    name: "⚡ perf - Performance improvements",
-    value: "perf",
+    name: "PERFORMANCE  - Performance improvements",
+    value: "PERFORMANCE",
     color: "greenBright",
     emoji: "⚡",
     description: "A code change that improves performance",
   },
   {
-    name: "🔥 remove - Removing code or files",
-    value: "remove",
+    name: "REMOVE       - Removing code or files",
+    value: "REMOVE",
     color: "redBright",
     emoji: "🔥",
     description: "Removing code or files",
   },
 ];
 
-function highlightTypos(text: string, typos: string[]): string {
-  let highlighted = text;
+function createSquigglyUnderline(text: string, typos: string[]): string {
+  let result = text;
 
   for (const typo of typos) {
-    // Create a squiggly underline effect using Unicode characters
-    const squiggly = "~".repeat(typo.length);
-    const highlightedTypo = chalk.red.underline(typo) + chalk.red(squiggly);
-    highlighted = highlighted.replace(
-      new RegExp(`\\b${typo}\\b`, "g"),
-      highlightedTypo
-    );
+    // Create a regex to find the typo with word boundaries
+    const regex = new RegExp(`\\b${typo}\\b`, "gi");
+    result = result.replace(regex, (match) => {
+      // Create squiggly underline using combining characters
+      const squiggly = "\u0330".repeat(match.length); // Combining tilde below
+      return chalk.red(match + squiggly);
+    });
   }
 
-  return highlighted;
+  return result;
 }
 
 function displayTypoWarnings(typos: string[]): void {
   if (typos.length > 0) {
-    console.log(chalk.yellow("\n⚠️  Potential typos detected:"));
+    console.log(chalk.yellow("\n⚠️  Potential spelling issues detected:"));
     typos.forEach((typo) => {
-      console.log(chalk.red(`   • ${typo} ${chalk.red("~~~~~~~~")}`));
+      console.log(chalk.red(`   ${chalk.red("~".repeat(typo.length))}`));
+      console.log(chalk.red(`   ${typo}`));
     });
     console.log(chalk.yellow("   Please review your commit message.\n"));
   }
 }
 
-export async function promptCommit(): Promise<void> {
-  console.log(chalk.bold.cyan("\n🎯 Git Commit Message Generator\n"));
-
+export async function promptCommit(hookFile?: string): Promise<void> {
   const answers = await inquirer.prompt([
     {
       name: "type",
       type: "list",
-      message: "Select commit type:",
+      message: "Select the type of change you're committing:",
       choices: COMMIT_TYPES.map((type) => ({
         name: type.name,
         value: type.value,
-        short: type.value,
+        short: type.emoji + " " + type.value,
       })),
-      pageSize: 10,
+      pageSize: 15,
     },
     {
       name: "scope",
       type: "input",
-      message: "Enter scope (optional):",
+      message: "What is the scope of this change? (optional):",
       filter: (input: string) => input.trim(),
     },
     {
       name: "message",
       type: "input",
-      message: "Enter commit message:",
+      message: "Write a short, imperative tense description of the change:",
       validate: (input: string) => {
-        if (input.length < 10) {
-          return "Message too short! Please provide at least 10 characters.";
+        if (input.length < 1) {
+          return "Please enter a commit message.";
         }
         if (input.length > 72) {
-          return "Message too long! Please keep it under 72 characters for the first line.";
+          return "Keep the first line under 72 characters.";
         }
         return true;
       },
@@ -142,18 +163,24 @@ export async function promptCommit(): Promise<void> {
     {
       name: "body",
       type: "input",
-      message: "Enter detailed description (optional):",
+      message: "Provide a longer description of the change (optional):",
       filter: (input: string) => input.trim(),
     },
     {
       name: "breaking",
       type: "confirm",
-      message: "Is this a breaking change?",
+      message: "Are there any breaking changes?",
       default: false,
+    },
+    {
+      name: "issues",
+      type: "input",
+      message: 'Add issue references (e.g., "fixes #123", "closes #456"):',
+      filter: (input: string) => input.trim(),
     },
   ]);
 
-  // Check for typos in the commit message
+  // Spell check
   const typos = checkSpelling(answers.message);
   const bodyTypos = answers.body ? checkSpelling(answers.body) : [];
   const allTypos = [...typos, ...bodyTypos];
@@ -175,76 +202,98 @@ export async function promptCommit(): Promise<void> {
   if (answers.breaking) {
     fullCommit += `\n\nBREAKING CHANGE: ${answers.message}`;
   }
+  if (answers.issues) {
+    fullCommit += `\n\n${answers.issues}`;
+  }
 
-  // Display results
+  // Display the generated commit message
   console.log(chalk.bold("\n📝 Generated Commit Message:\n"));
-
-  // Display header with color coding
-  const coloredHeader = (chalk[selectedType.color] as any)(
-    `${selectedType.emoji} ${commitHeader}`
+  console.log(
+    "┌─────────────────────────────────────────────────────────────────────────────┐"
   );
-  console.log(coloredHeader);
 
-  // Display body if present
+  // Display header with proper coloring
+  const colorFn = chalk[selectedType.color] as any;
+  console.log(
+    `│ ${colorFn(selectedType.emoji + " " + commitHeader).padEnd(75)} │`
+  );
+
   if (answers.body) {
-    console.log(chalk.gray("\nBody:"));
-    console.log(chalk.white(answers.body));
+    // console.log(
+    //   "│                                                                               │"
+    // );
+    const bodyLines = answers.body.split("\n");
+    bodyLines.forEach((line: string) => {
+      console.log(`│ ${chalk.gray(line).padEnd(75)} │`);
+    });
   }
 
-  // Display breaking change notice
   if (answers.breaking) {
-    console.log(chalk.red.bold("\n💥 BREAKING CHANGE"));
+    // console.log(
+    //   "│                                                                               │"
+    // );
+    console.log(
+      `│ ${chalk.red.bold("💥 BREAKING CHANGE: " + answers.message).padEnd(75)} │`
+    );
   }
 
-  // Show typo warnings
-  displayTypoWarnings(allTypos);
+  if (answers.issues) {
+    // console.log(
+    //   "│                                                                               │"
+    // );
+    console.log(`│ ${chalk.blue(answers.issues).padEnd(75)} │`);
+  }
 
-  // Show message with typos highlighted
+  console.log(
+    "└─────────────────────────────────────────────────────────────────────────────┘"
+  );
+
+  // Show typo warnings with squiggly underlines
   if (allTypos.length > 0) {
-    console.log(chalk.yellow("Message with typos highlighted:"));
-    const highlightedMessage = highlightTypos(answers.message, typos);
-    const highlightedBody = answers.body
-      ? highlightTypos(answers.body, bodyTypos)
-      : "";
+    console.log(chalk.yellow("\n⚠️  Potential spelling issues detected:"));
+    console.log(chalk.yellow("Message with issues highlighted:"));
 
-    console.log(
-      (chalk[selectedType.color] as any)(
-        `${selectedType.emoji} ${answers.type}${scope}${breakingPrefix}: ${highlightedMessage}`
-      )
-    );
+    const highlightedHeader = createSquigglyUnderline(commitHeader, typos);
+    console.log(`${colorFn(selectedType.emoji)} ${highlightedHeader}`);
 
-    if (highlightedBody) {
+    if (answers.body && bodyTypos.length > 0) {
+      const highlightedBody = createSquigglyUnderline(answers.body, bodyTypos);
       console.log(chalk.gray("\nBody:"));
       console.log(highlightedBody);
     }
+
+    displayTypoWarnings(allTypos);
   }
 
-  // Ask for confirmation
+  // Final confirmation
   const { confirm } = await inquirer.prompt([
     {
       name: "confirm",
       type: "confirm",
       message:
         allTypos.length > 0
-          ? "Do you want to proceed with this commit message despite potential typos?"
-          : "Do you want to use this commit message?",
+          ? "Do you want to proceed with this commit despite potential spelling issues?"
+          : "Looks good! Create this commit?",
       default: allTypos.length === 0,
     },
   ]);
 
   if (confirm) {
-    console.log(chalk.green("\n✅ Commit message ready to use!"));
-    console.log(chalk.dim("Copy the following command:"));
-    console.log(
-      chalk.white.bold(
-        `git commit -m "${commitHeader}"${answers.body ? ` -m "${answers.body}"` : ""}`
-      )
-    );
+    if (hookFile) {
+      // Write to the commit message file for git hook
+      writeFileSync(hookFile, fullCommit);
+    } else {
+      // Execute git commit directly
+      executeGitCommit(commitHeader, answers.body);
+    }
+
+    console.log(chalk.green("\n✅ Commit message created successfully!"));
   } else {
     console.log(
       chalk.yellow(
-        "\n❌ Commit cancelled. You can run the tool again to create a new message."
+        "\n❌ Commit cancelled. Run the command again to create a new message."
       )
     );
+    process.exit(1);
   }
 }
