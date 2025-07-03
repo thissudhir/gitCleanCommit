@@ -5,9 +5,8 @@
     "moduleResolution": "Node",
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "outDir": "./dist",
-    "rootDir": "./",
     "allowImportingTsExtensions": true,
+    "noEmit": true,
     "strict": true
   },
   "ts-node": {
