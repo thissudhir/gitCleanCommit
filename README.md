@@ -2,7 +2,7 @@
 
 > A beautiful CLI tool for creating clean, conventional git commits with spell checking and automatic integration
 
-[![npm version](https://badge.fury.io/js/gitclean-cli.svg)](https://badge.fury.io/js/gitclean-cli)
+[![npm version](https://badge.fury.io/js/gitcleancommit.svg)](https://badge.fury.io/js/gitcleancommit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## ✨ Features
@@ -21,10 +21,10 @@
 
 ```bash
 # Install globally
-npm install -g gitclean-cli
+npm install -g gitcleancommit
 
 # Or install locally in your project
-npm install --save-dev gitclean-cli
+npm install --save-dev gitcleancommit
 ```
 
 ### Basic Usage
@@ -133,7 +133,7 @@ BREAKING CHANGE: API endpoints now require authentication
 ## 📁 Project Structure
 
 ```
-gitclean-cli/
+gitcleancommit/
 ├── src/
 │   ├── index.ts           # Main CLI entry point
 │   ├── prompt.ts          # Interactive prompts

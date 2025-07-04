@@ -1,6 +1,6 @@
 {
-  "name": "gitclean",
-  "version": "1.0.0",
+  "name": "gitcleancommit",
+  "version": "1.0.2",
   "description": "A beautiful CLI tool for creating clean, conventional git commits with spell checking and automatic integration",
   "main": "dist/index.js",
   "type": "module",
