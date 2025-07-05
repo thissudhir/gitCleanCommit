@@ -19,11 +19,11 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Setup pnpm
-        run: npm install -g pnpm
+      # - name: Setup pnpm
+      #   run: npm install -g pnpm
 
       - name: Install dependencies
-        run: pnpm install
+        run: npm install
 
       - name: Check the version
         id: check
@@ -46,7 +46,7 @@ jobs:
           fi
 
       - name: Build
-        run: pnpm build
+        run: npm build
         if: steps.check.outputs.version_changed == 'true'
 
       # FIXED: Explicit auth setup
