@@ -1,5 +1,5 @@
 {
-  "name": "gitcleancommit",
+  "name": "@thissudhir/gitcleancommit",
   "version": "1.0.3",
   "description": "A beautiful CLI tool for creating clean, conventional git commits with spell checking and automatic integration",
   "main": "dist/index.js",
