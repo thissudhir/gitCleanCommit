@@ -9,12 +9,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4 # Updated version
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4 # Updated version
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
@@ -25,8 +25,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      # - name: Test
-      #   run: pnpm test
+      # Debug step
+      - name: Debug npm auth
+        run: |
+          echo "NPM Registry: $(npm config get registry)"
+          echo "NPM User: $(npm whoami 2>/dev/null || echo 'Not authenticated')"
+          echo "Package name: $(jq -r .name package.json)"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Check the version
         id: check
