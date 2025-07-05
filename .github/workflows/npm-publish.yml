@@ -29,7 +29,7 @@ jobs:
       - name: Debug npm auth
         run: |
           echo "NPM Registry: $(npm config get registry)"
-          echo "NPM User: $(npm whoami 2>/dev/null || echo 'Not authenticated')"
+          echo "NPM User: $(npm whoami 2>/dev/null || echo 'Not authenticated')
           echo "Package name: $(jq -r .name package.json)"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
