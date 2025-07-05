@@ -46,7 +46,7 @@ jobs:
           fi
 
       - name: Build
-        run: npm build
+        run: npm run build
         if: steps.check.outputs.version_changed == 'true'
 
       # FIXED: Explicit auth setup
