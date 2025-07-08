@@ -1,9 +1,10 @@
 import inquirer from "inquirer";
 import chalk from "chalk";
-import { checkSpelling } from "./spellcheck.js";
+import { GitCleanSpellChecker, SpellCheckResult } from "./spellcheck.js";
 import { executeFullGitWorkflow } from "./git-integration.js";
 import { writeFileSync } from "fs";
 import boxen from "boxen";
+
 interface CommitType {
   name: string;
   value: string;
@@ -57,39 +58,59 @@ const COMMIT_TYPES: CommitType[] = [
   },
 ];
 
-function createSquigglyUnderline(text: string, typos: string[]): string {
+function createSquigglyUnderline(
+  text: string,
+  errors: SpellCheckResult[]
+): string {
+  if (errors.length === 0) return text;
+
   let result = text;
 
-  for (const typo of typos) {
-    const regex = new RegExp(`\\b${typo}\\b`, "gi");
-    result = result.replace(regex, (match) => {
-      const squiggly = "\u0330".repeat(match.length);
-      return chalk.red(match + squiggly);
-    });
+  // Sort errors by position (descending) to avoid index shifting issues
+  const sortedErrors = errors.sort(
+    (a, b) => b.position.start - a.position.start
+  );
+
+  for (const error of sortedErrors) {
+    const { word, position } = error;
+    const beforeWord = result.substring(0, position.start);
+    const afterWord = result.substring(position.end);
+
+    // Create red squiggly underline effect using Unicode combining characters
+    const squigglyWord = chalk.red(word + "̰".repeat(word.length));
+    result = beforeWord + squigglyWord + afterWord;
   }
 
   return result;
 }
 
-function displayTypoWarnings(typos: string[]): void {
-  if (typos.length > 0) {
-    const warningBox = boxen(
-      chalk.yellow("⚠️  Potential spelling issues detected:\n") +
-        typos
-          .map((typo) => chalk.red(`• ${typo} ${"\u0330".repeat(typo.length)}`))
-          .join("\n") +
-        chalk.yellow("\n\nPlease review your commit message."),
-      {
-        padding: 1,
-        margin: 1,
-        borderColor: "yellow",
-        borderStyle: "round",
-        title: "Spelling Check",
-        titleAlignment: "center",
-      }
-    );
-    console.log(warningBox);
-  }
+function displaySpellCheckWarnings(errors: SpellCheckResult[]): void {
+  if (errors.length === 0) return;
+
+  const warningContent = [
+    chalk.yellow("⚠️  Spelling issues detected:\n"),
+    ...errors.map((error) => {
+      const suggestions =
+        error.suggestions.length > 0
+          ? ` → ${chalk.green(error.suggestions.slice(0, 3).join(", "))}`
+          : "";
+      return chalk.red(`• ${error.word}`) + suggestions;
+    }),
+    chalk.yellow(
+      "\n💡 Tip: Use auto-correct to fix these issues automatically."
+    ),
+  ].join("\n");
+
+  const warningBox = boxen(warningContent, {
+    padding: 1,
+    margin: 1,
+    borderColor: "yellow",
+    borderStyle: "round",
+    title: "Spell Check Results",
+    titleAlignment: "center",
+  });
+
+  console.log(warningBox);
 }
 
 function handleEscapeKey(): void {
@@ -109,6 +130,7 @@ function handleEscapeKey(): void {
   console.log(exitBox);
   process.exit(0);
 }
+
 type ChalkColorMethod =
   | "green"
   | "red"
@@ -123,7 +145,6 @@ type ChalkColorMethod =
   | "magenta"
   | "bgGreen";
 
-// Type guard to check if a key is a color method
 function isChalkColorMethod(key: keyof typeof chalk): key is ChalkColorMethod {
   const colorMethods: ChalkColorMethod[] = [
     "green",
@@ -142,7 +163,6 @@ function isChalkColorMethod(key: keyof typeof chalk): key is ChalkColorMethod {
   return colorMethods.includes(key as ChalkColorMethod);
 }
 
-// Safe color accessor function
 function getChalkColor(color: ChalkColorMethod): (text: string) => string {
   return chalk[color];
 }
@@ -188,16 +208,127 @@ function formatCommitMessage(
   return message;
 }
 
+async function handleSpellCheckAndCorrection(
+  text: string,
+  fieldName: string
+): Promise<string> {
+  const spellCheckResults = await GitCleanSpellChecker.checkSpelling(text);
+
+  if (spellCheckResults.length === 0) {
+    return text; // No spelling errors
+  }
+
+  // Display errors with squiggly underlines
+  const textWithUnderlines = GitCleanSpellChecker.createSquigglyUnderline(
+    text,
+    spellCheckResults
+  );
+
+  console.log(
+    boxen(
+      chalk.yellow(`Spelling issues found in ${fieldName}:\n`) +
+        textWithUnderlines +
+        "\n\n" +
+        spellCheckResults
+          .map((error) => {
+            const suggestions =
+              error.suggestions.length > 0
+                ? ` → ${chalk.green(error.suggestions.slice(0, 3).join(", "))}`
+                : "";
+            return chalk.red(`• ${error.word}`) + suggestions;
+          })
+          .join("\n"),
+      {
+        padding: 1,
+        margin: 1,
+        borderColor: "yellow",
+        borderStyle: "round",
+        title: "Spell Check",
+        titleAlignment: "center",
+      }
+    )
+  );
+
+  // Ask user what to do
+  const { action } = await inquirer.prompt([
+    {
+      name: "action",
+      type: "list",
+      message: "What would you like to do?",
+      choices: [
+        { name: "✨ Auto-correct all issues", value: "auto-correct" },
+        { name: "✏️  Edit manually", value: "edit" },
+        { name: "➡️  Continue with current text", value: "continue" },
+      ],
+    },
+  ]);
+
+  switch (action) {
+    case "auto-correct":
+      const correctedText = await GitCleanSpellChecker.autoCorrectText(text);
+      console.log(
+        boxen(
+          chalk.green("Auto-corrected text:\n") + chalk.white(correctedText),
+          {
+            padding: 1,
+            margin: 1,
+            borderColor: "green",
+            borderStyle: "round",
+            title: "Auto-Correction Result",
+            titleAlignment: "center",
+          }
+        )
+      );
+      return correctedText;
+
+    case "edit":
+      const { editedText } = await inquirer.prompt([
+        {
+          name: "editedText",
+          type: "input",
+          message: `Edit your ${fieldName}:`,
+          default: text,
+        },
+      ]);
+      // Recursively check the edited text
+      return await handleSpellCheckAndCorrection(editedText, fieldName);
+
+    case "continue":
+    default:
+      return text;
+  }
+}
+
 export async function promptCommit(hookFile?: string): Promise<void> {
   setupEscapeHandler();
 
+  // Initialize spell checker
+  await GitCleanSpellChecker.initialize();
+  const spellCheckStats = GitCleanSpellChecker.getSpellCheckStats();
+
   console.log(
-    boxen(chalk.dim("💡 Tip: Press ESC at any time to cancel"), {
-      padding: 1,
-      margin: { top: 1, bottom: 1 },
-      borderColor: "blue",
-      borderStyle: "round",
-    })
+    boxen(
+      chalk.dim("💡 Tips:\n") +
+        chalk.dim("• Press ESC at any time to cancel\n") +
+        chalk.dim("• Spell checking will auto-detect issues\n") +
+        chalk.dim("• Use auto-correct to fix spelling errors\n\n") +
+        chalk.dim("📊 Spell Checker Status:\n") +
+        chalk.dim(
+          `• Dictionary: ${spellCheckStats.hasDictionary ? "✅ Loaded" : "⚠️  Fallback mode"}\n`
+        ) +
+        chalk.dim(
+          `• Technical words: ${spellCheckStats.technicalWordsCount}\n`
+        ) +
+        chalk.dim(`• Typo rules: ${spellCheckStats.typoRulesCount}`),
+      {
+        padding: 1,
+        margin: { top: 1, bottom: 1 },
+        borderColor: "blue",
+        borderStyle: "round",
+        title: "GitClean Helper",
+        titleAlignment: "center",
+      }
+    )
   );
 
   try {
@@ -254,10 +385,24 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       },
     ]);
 
-    // Spell check
-    const typos = checkSpelling(answers.message);
-    const bodyTypos = answers.body ? checkSpelling(answers.body) : [];
-    const allTypos = [...typos, ...bodyTypos];
+    // Spell check and potentially correct the commit message
+    const correctedMessage = await handleSpellCheckAndCorrection(
+      answers.message,
+      "commit message"
+    );
+
+    // Spell check and potentially correct the body if provided
+    let correctedBody = answers.body;
+    if (answers.body && answers.body.length > 0) {
+      correctedBody = await handleSpellCheckAndCorrection(
+        answers.body,
+        "commit body"
+      );
+    }
+
+    // Update answers with corrected text
+    answers.message = correctedMessage;
+    answers.body = correctedBody;
 
     // Find the selected commit type
     const selectedType = COMMIT_TYPES.find(
@@ -278,52 +423,17 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       answers.issues
     );
 
-    // Display the generated commit message in a box
+    // Display the final commit message
     console.log(
       boxen(formattedCommit, {
         padding: 1,
         margin: 1,
         borderColor: selectedType.color,
         borderStyle: "round",
-        title: "Generated Commit Message",
+        title: "Final Commit Message",
         titleAlignment: "center",
       })
     );
-
-    // Show typo warnings if any
-    if (allTypos.length > 0) {
-      const highlightedHeader = createSquigglyUnderline(commitHeader, typos);
-      let highlightedBody = answers.body || "";
-
-      if (answers.body && bodyTypos.length > 0) {
-        highlightedBody = createSquigglyUnderline(answers.body, bodyTypos);
-      }
-
-      const warningMessage = [
-        chalk.yellow("Message with issues highlighted:"),
-        `${selectedType.emoji} ${
-          isChalkColorMethod(selectedType.color)
-            ? getChalkColor(selectedType.color)(highlightedHeader)
-            : chalk.white(highlightedHeader)
-        }`,
-        ...(answers.body
-          ? ["", chalk.gray("Body:"), chalk.gray(highlightedBody)]
-          : []),
-      ].join("\n");
-
-      console.log(
-        boxen(warningMessage, {
-          padding: 1,
-          margin: { top: 1, bottom: 1 },
-          borderColor: "yellow",
-          borderStyle: "round",
-          title: "Spelling Issues Detected",
-          titleAlignment: "center",
-        })
-      );
-
-      displayTypoWarnings(allTypos);
-    }
 
     // Build the actual commit message for git
     let fullCommit = commitHeader;
@@ -342,11 +452,8 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       {
         name: "confirm",
         type: "confirm",
-        message:
-          allTypos.length > 0
-            ? "Proceed with potential spelling issues?"
-            : "Ready to commit?",
-        default: allTypos.length === 0,
+        message: "Ready to commit?",
+        default: true,
       },
     ]);
 
