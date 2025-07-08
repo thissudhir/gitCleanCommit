@@ -4,6 +4,7 @@ import { GitCleanSpellChecker, SpellCheckResult } from "./spellcheck.js";
 import { executeFullGitWorkflow } from "./git-integration.js";
 import { writeFileSync } from "fs";
 import boxen from "boxen";
+import readline from "readline";
 
 interface CommitType {
   name: string;
@@ -57,6 +58,233 @@ const COMMIT_TYPES: CommitType[] = [
     description: "Removing code or files",
   },
 ];
+
+// Real-time spell check input class
+class SpellCheckInput {
+  private currentText: string = "";
+  private spellErrors: SpellCheckResult[] = [];
+  private isAutoCorrectEnabled: boolean = false;
+  private rl: readline.Interface;
+  private onFinish: (text: string) => void;
+  private lastCursorPos: number = 0;
+
+  constructor(
+    prompt: string,
+    onFinish: (text: string) => void,
+    autoCorrect: boolean = false
+  ) {
+    this.onFinish = onFinish;
+    this.isAutoCorrectEnabled = autoCorrect;
+
+    this.rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      prompt: prompt,
+    });
+
+    this.setupEventHandlers();
+  }
+
+  private setupEventHandlers(): void {
+    // Handle character input
+    this.rl.on("line", (input) => {
+      this.currentText = input.trim();
+      this.onFinish(this.currentText);
+      this.rl.close();
+    });
+
+    // Handle real-time input (keypress events)
+    process.stdin.on("keypress", async (str, key) => {
+      if (!key) return;
+
+      // Handle special keys
+      if (key.name === "return" || key.name === "enter") {
+        return; // Let readline handle this
+      }
+
+      if (key.name === "escape") {
+        this.handleEscape();
+        return;
+      }
+
+      if (key.name === "tab" && this.isAutoCorrectEnabled) {
+        await this.handleAutoCorrect();
+        return;
+      }
+
+      // Update current text for real-time checking
+      if (key.name === "backspace") {
+        this.currentText = this.currentText.slice(0, -1);
+      } else if (str && str.length === 1 && !key.ctrl && !key.meta) {
+        this.currentText += str;
+      }
+
+      // Perform real-time spell checking with debouncing
+      await this.performRealTimeSpellCheck();
+    });
+
+    // Enable keypress events
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+    }
+    process.stdin.resume();
+  }
+
+  private async performRealTimeSpellCheck(): Promise<void> {
+    // Debounce spell checking to avoid excessive API calls
+    clearTimeout((this as any).spellCheckTimeout);
+    (this as any).spellCheckTimeout = setTimeout(async () => {
+      if (this.currentText.length > 0) {
+        this.spellErrors = await GitCleanSpellChecker.checkSpelling(
+          this.currentText
+        );
+        this.updateDisplay();
+      }
+    }, 300); // 300ms debounce
+  }
+
+  private updateDisplay(): void {
+    // Clear current line and move cursor to beginning
+    process.stdout.write("\r\x1b[K");
+
+    // Show prompt
+    process.stdout.write(this.rl.getPrompt());
+
+    // Show text with spell check indicators
+    const displayText = this.createDisplayText();
+    process.stdout.write(displayText);
+
+    // Show spell check status if there are errors
+    if (this.spellErrors.length > 0) {
+      const errorSummary = this.createErrorSummary();
+      process.stdout.write(errorSummary);
+    }
+  }
+
+  private createDisplayText(): string {
+    if (this.spellErrors.length === 0) {
+      return this.currentText;
+    }
+
+    let result = this.currentText;
+
+    // Sort errors by position (descending) to avoid index shifting
+    const sortedErrors = this.spellErrors.sort(
+      (a, b) => b.position.start - a.position.start
+    );
+
+    for (const error of sortedErrors) {
+      const { word, position } = error;
+      const beforeWord = result.substring(0, position.start);
+      const afterWord = result.substring(position.end);
+
+      // Create red underlined text for misspelled words
+      const highlightedWord = chalk.red.underline(word);
+      result = beforeWord + highlightedWord + afterWord;
+    }
+
+    return result;
+  }
+
+  private createErrorSummary(): string {
+    if (this.spellErrors.length === 0) return "";
+
+    const errorCount = this.spellErrors.length;
+    const suggestions = this.spellErrors
+      .slice(0, 3) // Show first 3 errors
+      .map((error) => {
+        const suggestion = error.suggestions[0] || "no suggestion";
+        return `${chalk.red(error.word)} → ${chalk.green(suggestion)}`;
+      })
+      .join(", ");
+
+    const statusText = chalk.yellow(
+      `\n  ⚠️  ${errorCount} spelling issue${errorCount > 1 ? "s" : ""}: ${suggestions}`
+    );
+
+    if (this.isAutoCorrectEnabled) {
+      return (
+        statusText +
+        chalk.dim("\n  💡 Press Tab to auto-correct, Ctrl+C to cancel")
+      );
+    }
+
+    return statusText + chalk.dim("\n  💡 Ctrl+C to cancel");
+  }
+
+  private async handleAutoCorrect(): Promise<void> {
+    if (this.spellErrors.length === 0) return;
+
+    const correctedText = await GitCleanSpellChecker.autoCorrectText(
+      this.currentText
+    );
+    this.currentText = correctedText;
+
+    // Clear errors since we just corrected them
+    this.spellErrors = [];
+
+    // Update the readline text
+    this.rl.write(null, { ctrl: true, name: "u" }); // Clear line
+    this.rl.write(correctedText);
+
+    this.updateDisplay();
+  }
+
+  private handleEscape(): void {
+    console.log(chalk.yellow("\n\n⚠️  Operation cancelled (ESC pressed)"));
+    process.exit(0);
+  }
+
+  public start(): void {
+    this.rl.prompt();
+  }
+
+  public close(): void {
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+    }
+    process.stdin.pause();
+    this.rl.close();
+  }
+}
+
+// Enhanced prompt function for commit message with real-time spell check
+async function promptCommitMessageWithSpellCheck(
+  message: string,
+  autoCorrect: boolean = false
+): Promise<string> {
+  return new Promise((resolve) => {
+    const input = new SpellCheckInput(
+      chalk.blue(message),
+      (text) => {
+        input.close();
+        resolve(text);
+      },
+      autoCorrect
+    );
+
+    input.start();
+  });
+}
+
+// Enhanced prompt function for commit body with real-time spell check
+async function promptCommitBodyWithSpellCheck(
+  message: string,
+  autoCorrect: boolean = false
+): Promise<string> {
+  return new Promise((resolve) => {
+    const input = new SpellCheckInput(
+      chalk.blue(message),
+      (text) => {
+        input.close();
+        resolve(text);
+      },
+      autoCorrect
+    );
+
+    input.start();
+  });
+}
 
 function createSquigglyUnderline(
   text: string,
@@ -308,10 +536,11 @@ export async function promptCommit(hookFile?: string): Promise<void> {
 
   console.log(
     boxen(
-      chalk.dim("💡 Tips:\n") +
+      chalk.dim("💡 Real-time Spell Checking Tips:\n") +
         chalk.dim("• Press ESC at any time to cancel\n") +
-        chalk.dim("• Spell checking will auto-detect issues\n") +
-        chalk.dim("• Use auto-correct to fix spelling errors\n\n") +
+        chalk.dim("• Misspelled words will show red underlines\n") +
+        chalk.dim("• Press Tab to auto-correct while typing\n") +
+        chalk.dim("• Spell checking happens in real-time\n\n") +
         chalk.dim("📊 Spell Checker Status:\n") +
         chalk.dim(
           `• Dictionary: ${spellCheckStats.hasDictionary ? "✅ Loaded" : "⚠️  Fallback mode"}\n`
@@ -325,14 +554,15 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         margin: { top: 1, bottom: 1 },
         borderColor: "blue",
         borderStyle: "round",
-        title: "GitClean Helper",
+        title: "GitClean Real-time Spell Check",
         titleAlignment: "center",
       }
     )
   );
 
   try {
-    const answers = await inquirer.prompt([
+    // Use regular inquirer for type and scope selection
+    const typeAndScope = await inquirer.prompt([
       {
         name: "type",
         type: "list",
@@ -350,27 +580,48 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         message: "What is the scope of this change? (optional):",
         filter: (input: string) => input.trim(),
       },
-      {
-        name: "message",
-        type: "input",
-        message: "Write a short, imperative tense description of the change:",
-        validate: (input: string) => {
-          if (input.length < 1) {
-            return "Please enter a commit message.";
-          }
-          if (input.length > 72) {
-            return "Keep the first line under 72 characters.";
-          }
-          return true;
-        },
-        filter: (input: string) => input.trim(),
-      },
-      {
-        name: "body",
-        type: "input",
-        message: "Provide a longer description of the change (optional):",
-        filter: (input: string) => input.trim(),
-      },
+    ]);
+
+    // Use real-time spell check input for commit message
+    console.log(
+      chalk.blue("\n📝 Enter commit message with real-time spell checking:")
+    );
+    console.log(
+      chalk.dim(
+        "💡 Type your message and see spelling errors highlighted in real-time!"
+      )
+    );
+    console.log(chalk.dim("💡 Press Tab to auto-correct misspelled words\n"));
+
+    const message = await promptCommitMessageWithSpellCheck(
+      "Write a short, imperative tense description: ",
+      true // Enable auto-correct
+    );
+
+    if (message.length < 1) {
+      console.log(chalk.red("❌ Please enter a commit message."));
+      return;
+    }
+    if (message.length > 72) {
+      console.log(chalk.red("❌ Keep the first line under 72 characters."));
+      return;
+    }
+
+    // Use real-time spell check input for commit body (optional)
+    console.log(
+      chalk.blue(
+        "\n📝 Enter commit body (optional) with real-time spell checking:"
+      )
+    );
+    console.log(chalk.dim("💡 Press Enter on empty line to skip\n"));
+
+    const body = await promptCommitBodyWithSpellCheck(
+      "Provide a longer description (optional): ",
+      true // Enable auto-correct
+    );
+
+    // Use regular inquirer for remaining fields
+    const additionalInfo = await inquirer.prompt([
       {
         name: "breaking",
         type: "confirm",
@@ -385,24 +636,12 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       },
     ]);
 
-    // Spell check and potentially correct the commit message
-    const correctedMessage = await handleSpellCheckAndCorrection(
-      answers.message,
-      "commit message"
-    );
-
-    // Spell check and potentially correct the body if provided
-    let correctedBody = answers.body;
-    if (answers.body && answers.body.length > 0) {
-      correctedBody = await handleSpellCheckAndCorrection(
-        answers.body,
-        "commit body"
-      );
-    }
-
-    // Update answers with corrected text
-    answers.message = correctedMessage;
-    answers.body = correctedBody;
+    const answers = {
+      ...typeAndScope,
+      message,
+      body,
+      ...additionalInfo,
+    };
 
     // Find the selected commit type
     const selectedType = COMMIT_TYPES.find(

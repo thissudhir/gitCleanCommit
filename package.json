@@ -1,5 +1,5 @@
 {
-  "name": "@thissudhir/gitcleancommit",
+  "name": "gitcleancommit",
   "version": "1.0.4",
   "description": "A beautiful CLI tool for creating clean, conventional git commits with advanced spell checking and automatic integration",
   "main": "dist/index.js",
@@ -43,7 +43,6 @@
   },
   "homepage": "https://github.com/thissudhir/gitCleanCommit#readme",
   "dependencies": {
-    "@thissudhir/gitcleancommit": "file:thissudhir-gitcleancommit-1.0.4.tgz",
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",
     "commander": "^12.1.0",
