@@ -23,7 +23,7 @@ const program = new Command();
 program
   .name("gitclean")
   .description("Clean, conventional commits made easy")
-  .version("1.0.4");
+  .version("1.0.5", "-v, --version", "Show version information");
 
 program
   .command("setup")
@@ -87,7 +87,7 @@ program
   .alias("spell")
   .description("Test spell checker with custom text")
   .argument("[text]", "Text to spell check")
-  .option("-v, --verbose", "Show detailed spell checker information")
+  .option("-vr, --verbose", "Show detailed spell checker information")
   .action(async (text, options) => {
     await GitCleanSpellChecker.initialize();
 
@@ -108,8 +108,8 @@ program
             chalk.dim("• Common development terms\n") +
             chalk.dim("• Technical abbreviations"),
           {
-            padding: 1,
-            margin: 1,
+            padding: 0.5,
+            margin: 0.5,
             borderColor: "blue",
             borderStyle: "round",
             title: "Spell Checker Status",
@@ -139,8 +139,8 @@ program
             chalk.green("✅ No spelling issues found!\n\n") +
               chalk.dim(`Checked text: "${text}"`),
             {
-              padding: 1,
-              margin: 1,
+              padding: 0.5,
+              margin: 0.5,
               borderColor: "green",
               borderStyle: "round",
               title: "Spell Check Results",
@@ -173,8 +173,8 @@ program
 
         console.log(
           boxen(resultContent, {
-            padding: 1,
-            margin: 1,
+            padding: 0.5,
+            margin: 0.5,
             borderColor: "yellow",
             borderStyle: "round",
             title: "Spell Check Results",
@@ -214,8 +214,8 @@ program
         chalk.blue("🧪 Running Spell Checker Tests\n\n") +
           chalk.dim("Testing with common development-related text..."),
         {
-          padding: 1,
-          margin: 1,
+          padding: 0.5,
+          margin: 0.5,
           borderColor: "blue",
           borderStyle: "round",
           title: "Spell Checker Test Suite",
@@ -249,8 +249,8 @@ program
           chalk.dim(`Total technical terms: ${stats.technicalWordsCount}\n`) +
           chalk.dim(`Total typo rules: ${stats.typoRulesCount}`),
         {
-          padding: 1,
-          margin: 1,
+          padding: 0.5,
+          margin: 0.5,
           borderColor: "green",
           borderStyle: "round",
           title: "Test Results",

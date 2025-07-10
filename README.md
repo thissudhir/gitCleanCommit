@@ -1,29 +1,34 @@
 # GitClean CLI 🚀
 
-> A beautiful CLI tool for creating clean, conventional git commits with spell checking and automatic integration
+> A beautiful CLI tool for creating clean, conventional git commits with real-time spell checking and seamless git workflow automation
 
 [![npm version](https://badge.fury.io/js/gitcleancommit.svg)](https://badge.fury.io/js/gitcleancommit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
 
 ## ✨ Features
 
-- **🎯 One Command Workflow**: `gitclean` handles everything - add, commit, and push
-- **📝 Interactive Prompts**: Beautiful, guided commit message creation
-- **🔍 Smart Spell Checking**: Catches common typos in commit messages
-- **🎨 Conventional Commits**: Follows conventional commit standards
-- **🌟 Beautiful UI**: Clean, colorful interface with emojis and spinners
-- **🔧 Git Hook Integration**: Optional automatic integration with git hooks
-- **⚡ Lightning Fast**: Optimized for daily development workflow
+- **🎯 Complete Git Workflow**: Single command to stage, commit, and push changes
+- **📝 Interactive Commit Builder**: Guided prompts for creating well-structured commits
+- **🔍 Real-time Spell Checking**: Live spell checking as you type with visual feedback
+- **🎨 Conventional Commits**: Enforces conventional commit standards with emojis
+- **🌟 Beautiful Terminal UI**: Colorful interface with boxes, spinners, and progress indicators
+- **🔧 Git Hook Integration**: Seamless integration with git's prepare-commit-msg hook
+- **⚡ Smart Defaults**: Works out of the box with zero configuration
+- **🧪 Built-in Testing Tools**: Test spell checker and see how it works
 
 ## 🚀 Quick Start
 
 ### Installation
 
 ```bash
-# Install globally
+# Install globally (recommended)
 npm install -g gitcleancommit
 
-# Or install locally in your project
+# Or use with npx (no installation)
+npx gitcleancommit
+
+# Or install as a dev dependency
 npm install --save-dev gitcleancommit
 ```
 
@@ -33,166 +38,221 @@ npm install --save-dev gitcleancommit
 # Run the complete workflow (add → commit → push)
 gitclean
 
-# That's it! 🎉
+# That's it! GitClean will handle everything else 🎉
 ```
 
 ## 📋 Commands
 
-### Primary Commands
+### `gitclean` (default)
+
+The main command that runs the complete git workflow:
+
+1. Shows the GitClean banner
+2. Checks for uncommitted changes
+3. Guides you through creating a conventional commit
+4. Stages all changes (`git add .`)
+5. Creates the commit
+6. Pushes to the current branch
 
 ```bash
-# Interactive commit workflow (recommended)
 gitclean
+```
 
-# Just create a commit (no push)
+### `gitclean commit`
+
+Create a commit without the full workflow (no automatic staging or pushing):
+
+```bash
 gitclean commit
 
-# Check git status
-gitclean status
+# Hook mode (used internally by git hooks)
+gitclean commit --hook <commit-msg-file>
 ```
 
-### Setup Commands
+### `gitclean setup` / `gitclean install`
+
+Install GitClean as a git hook in your repository:
 
 ```bash
-# Install git hooks for automatic integration
 gitclean setup
-
-# Remove git hooks
-gitclean uninstall
+# or
+gitclean install
 ```
 
-## 🎯 How It Works
+This creates a `prepare-commit-msg` hook that automatically runs GitClean when you use `git commit`.
 
-When you run `gitclean`, here's what happens:
+### `gitclean uninstall` / `gitclean remove`
 
-1. **📁 Stage Changes**: Automatically runs `git add .`
-2. **💬 Interactive Prompt**: Guides you through creating a conventional commit message
-3. **🔍 Spell Check**: Checks for common typos in your commit message
-4. **📝 Preview**: Shows you exactly what your commit will look like
-5. **✅ Commit**: Creates the commit with your message
-6. **🚀 Push**: Automatically pushes to your current branch
+Remove GitClean git hooks from your repository:
+
+```bash
+gitclean uninstall
+# or
+gitclean remove
+```
+
+### `gitclean status` / `gitclean s`
+
+Display the current git status:
+
+```bash
+gitclean status
+# or
+gitclean s
+```
+
+### `gitclean spellcheck` / `gitclean spell`
+
+Test the spell checker with custom text:
+
+```bash
+# Basic spell check
+gitclean spellcheck "your text here"
+
+# Verbose mode - shows dictionary stats
+gitclean spellcheck "your text" --verbose
+gitclean spellcheck "your text" -vr
+```
+
+### `gitclean test`
+
+Run the built-in spell checker test suite with common development terms:
+
+```bash
+gitclean test
+```
+
+### `gitclean --version` / `gitclean -v`
+
+Show the current version:
+
+```bash
+gitclean --version
+# or
+gitclean -v
+```
 
 ## 🎨 Commit Types
 
-GitClean supports these conventional commit types:
+GitClean supports six conventional commit types, each with its own color and emoji:
 
-| Type     | Description            | Example                                     |
-| -------- | ---------------------- | ------------------------------------------- |
-| `ADD`    | Add new code or files  | `ADD: user authentication system`           |
-| `FIX`    | A bug fix              | `FIX: resolve login validation issue`       |
-| `UPDATE` | Updated existing code  | `UPDATE: improve database connection logic` |
-| `DOCS`   | Documentation changes  | `DOCS: add API usage examples`              |
-| `TEST`   | Adding tests           | `TEST: add unit tests for auth module`      |
-| `REMOVE` | Removing code or files | `REMOVE: deprecated legacy components`      |
+| Type     | Emoji | Color      | Description                      | Example                               |
+| -------- | ----- | ---------- | -------------------------------- | ------------------------------------- |
+| `ADD`    | ➕    | Green      | Add new code, features, or files | `ADD: user authentication module`     |
+| `FIX`    | 🐛    | Red        | Fix bugs or issues               | `FIX: resolve memory leak in parser`  |
+| `UPDATE` | 🔄    | Yellow     | Update existing code or features | `UPDATE: improve error handling`      |
+| `DOCS`   | 📚    | Blue       | Documentation changes only       | `DOCS: add API usage examples`        |
+| `TEST`   | ✅    | Cyan       | Add or update tests              | `TEST: add unit tests for validators` |
+| `REMOVE` | 🗑️    | Bright Red | Remove code, files, or features  | `REMOVE: deprecated API endpoints`    |
 
-## 🔍 Spell Checking
+## 🔍 Real-time Spell Checking
 
-GitClean includes intelligent spell checking that catches common programming typos:
+GitClean features an advanced spell checker specifically optimized for development:
 
-- `functionallity` → `functionality`
+### Features
+
+- **Live Feedback**: See misspellings highlighted in red as you type
+- **Smart Dictionary**: Recognizes 200+ technical terms and programming keywords
+- **Common Typo Detection**: Automatically catches and suggests fixes for common developer typos
+- **Visual Indicators**: Misspelled words are underlined in red during input
+
+### Technical Dictionary
+
+The spell checker recognizes common development terms including:
+
+- Programming languages: `javascript`, `typescript`, `python`, `java`, etc.
+- Frameworks: `react`, `vue`, `angular`, `nodejs`, `webpack`, etc.
+- Git terms: `commit`, `merge`, `rebase`, `checkout`, etc.
+- DevOps: `docker`, `kubernetes`, `ci/cd`, `aws`, `azure`, etc.
+- Web terms: `api`, `http`, `cors`, `jwt`, `oauth`, etc.
+- And 150+ more technical terms!
+
+### Common Typo Corrections
+
+Automatically detects and corrects common programming typos:
+
+- `fucntion` → `function`
 - `recieve` → `receive`
 - `occured` → `occurred`
 - `seperate` → `separate`
-- `implmentation` → `implementation`
-- And many more...
+- `componnet` → `component`
+- `databse` → `database`
+- And 100+ more patterns!
 
-## 🛠️ Advanced Usage
+## 💡 Usage Examples
 
-### Git Hook Integration
-
-For automatic integration with your git workflow:
-
-```bash
-# Install hooks
-gitclean setup
-
-# Now every time you run `git commit`, GitClean will prompt you
-git commit
-```
-
-### Custom Scopes
-
-You can add scopes to your commits for better organization:
-
-```
-ADD(auth): user login functionality
-FIX(api): resolve timeout issues
-UPDATE(ui): improve button styling
-```
-
-### Breaking Changes
-
-Mark breaking changes for semantic versioning:
-
-```
-ADD!: new API endpoint structure
-
-BREAKING CHANGE: API endpoints now require authentication
-```
-
-## 📁 Project Structure
-
-```
-gitcleancommit/
-├── src/
-│   ├── index.ts           # Main CLI entry point
-│   ├── prompt.ts          # Interactive prompts
-│   ├── git-integration.ts # Git operations
-│   ├── spellcheck.ts      # Spell checking logic
-│   └── banner.ts          # CLI banner
-├── package.json
-├── tsconfig.json
-├── setup.js              # Post-install setup
-└── README.md
-```
-
-## 🔧 Configuration
-
-GitClean works out of the box with sensible defaults. No configuration file needed!
-
-## 🤝 Contributing
-
-We welcome contributions! Here's how to get started:
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes
-4. Run tests: `npm test`
-5. Commit using GitClean: `gitclean` 😉
-6. Push to your fork: `git push origin feature/amazing-feature`
-7. Create a Pull Request
-
-## 📝 Examples
-
-### Basic Commit
+### Basic Commit Workflow
 
 ```bash
 $ gitclean
 
-   _____ _ _    _____ _
-  / ____(_) |  / ____| |
- | |  __ _| |_| |    | | ___  __ _ _ __
- | | |_ | | __| |    | |/ _ \/ _` | '_ \
- | |__| | | |_| |____| |  __/ (_| | | | |
-  \_____|_|\__|\_______|_|    \__,_|_| |_|
-
+  GitClean Banner (ASCII Art)
   Clean, conventional commits made easy
 
-? Select the type of change you're committing: ADD - Add new code or files
+🔍 Found changes to commit
+This will: git add . → git commit → git push
+
+🔤 Real-time spell checking enabled for text inputs!
+
+? Select the type of change you're committing: (Use arrow keys)
+❯ ADD          - Add new code or files
+  FIX          - A bug fix
+  UPDATE       - Updated a file or code
+  DOCS         - Documentation changes
+  TEST         - Adding tests
+  REMOVE       - Removing code or files
+```
+
+### Commit with Scope
+
+Add a scope to categorize your commits:
+
+```bash
 ? What is the scope of this change? (optional): auth
-? Write a short, imperative tense description: user login functionality
-? Provide a longer description of the change (optional):
-? Are there any breaking changes? No
-? Add issue references (e.g., "fixes #123", "closes #456"): fixes #42
+? Write a short, imperative tense description: implement JWT token validation
 
-📝 Generated Commit Message:
+# Results in: ADD(auth): implement JWT token validation
+```
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ ➕ ADD(auth): user login functionality                                       │
-│ fixes #42                                                                   │
-└─────────────────────────────────────────────────────────────────────────────┘
+### Breaking Changes
 
-? Ready to add, commit, and push? (This will run: git add . → git commit → git push) Yes
+Mark commits that introduce breaking changes:
+
+```bash
+? Are there any breaking changes? Yes
+
+# Adds "BREAKING CHANGE:" to the commit body
+# Results in: ADD(auth)!: new authentication system
+```
+
+### Issue References
+
+Link commits to issues:
+
+```bash
+? Add issue references: fixes #123, closes #456
+
+# Adds issue references to the commit body
+```
+
+### Complete Example
+
+```bash
+$ gitclean
+
+# After answering all prompts:
+
+┌─ Final Commit Message ──────────────────────────────────┐
+│ ➕ ADD(auth): implement JWT token validation            │
+│                                                         │
+│ Added secure token validation with refresh capability   │
+│                                                         │
+│ 💥 BREAKING CHANGE: implement JWT token validation      │
+│                                                         │
+│ fixes #123, closes #456                                 │
+└─────────────────────────────────────────────────────────┘
+
+? Ready to commit? Yes
 
 🚀 Starting GitClean workflow...
 
@@ -204,55 +264,304 @@ $ gitclean
 📦 Changes pushed to main
 ```
 
-## 🐛 Troubleshooting
+## 🧪 Testing the Spell Checker
 
-### Common Issues
+### Interactive Testing
 
-**"Not in a git repository"**
+Test the spell checker with your own text:
 
 ```bash
-# Make sure you're in a git repository
+$ gitclean spellcheck "Fix fucntion that handls user authetication"
+
+🔍 Checking spelling...
+
+┌─ Spell Check Results ───────────────────────────────────┐
+│ ⚠️  Spelling issues found:                              │
+│                                                         │
+│ Original: Fix fucntion that handls user authetication   │
+│ Corrected: Fix function that handles user authentication│
+│                                                         │
+│ 📝 Issues found:                                        │
+│ • fucntion → function                                   │
+│ • handls → handles                                      │
+│ • authetication → authentication                        │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Verbose Mode
+
+See detailed spell checker statistics:
+
+```bash
+$ gitclean spellcheck --verbose
+
+┌─ Spell Checker Status ──────────────────────────────────┐
+│ 📊 Spell Checker Information                            │
+│                                                         │
+│ Initialized: ✅                                         │
+│ Dictionary: ✅ Loaded                                   │
+│ Technical words: 200+                                   │
+│ Typo correction rules: 100+                             │
+│                                                         │
+│ This spell checker is optimized for:                   │
+│ • Git commit messages                                   │
+│ • Programming terminology                               │
+│ • Common development terms                              │
+│ • Technical abbreviations                               │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Run Test Suite
+
+Run the built-in test suite:
+
+```bash
+$ gitclean test
+
+┌─ Spell Checker Test Suite ──────────────────────────────┐
+│ 🧪 Running Spell Checker Tests                          │
+│                                                         │
+│ Testing with common development-related text...         │
+└─────────────────────────────────────────────────────────┘
+
+1. Testing: "Fix typo in fucntion name"
+   ❌ Found 1 issue(s)
+   🔧 Corrected: "Fix typo in function name"
+
+2. Testing: "Add new componnet for user managment"
+   ❌ Found 2 issue(s)
+   🔧 Corrected: "Add new component for user management"
+
+# ... more test cases ...
+
+┌─ Test Results ──────────────────────────────────────────┐
+│ ✅ Test completed!                                      │
+│                                                         │
+│ Dictionary status: Active                               │
+│ Total technical terms: 200+                             │
+│ Total typo rules: 100+                                  │
+└─────────────────────────────────────────────────────────┘
+```
+
+## 🔧 Git Hook Integration
+
+### Automatic Setup
+
+Install GitClean as a git hook to use it with standard git commands:
+
+```bash
+# Install the hook
+gitclean setup
+
+# Now use git commit as usual
+git add .
+git commit  # GitClean will automatically run!
+```
+
+### Manual Removal
+
+Remove the git hook if needed:
+
+```bash
+gitclean uninstall
+```
+
+### How It Works
+
+The git hook integration:
+
+1. Creates a `prepare-commit-msg` hook in `.git/hooks/`
+2. Runs GitClean automatically when you use `git commit`
+3. Only activates for empty commit messages
+4. Doesn't interfere with merge commits or rebases
+
+## ⚙️ Configuration
+
+GitClean works with zero configuration! However, here are some behaviors to note:
+
+### Default Behaviors
+
+- **File Staging**: By default runs `git add .` (all files)
+- **Push Target**: Pushes to the current branch on `origin`
+- **Spell Check**: Enabled by default for all text inputs
+- **Commit Format**: Follows conventional commit standards
+
+### Requirements
+
+- **Node.js**: Version 18.0.0 or higher
+- **Git**: Must be installed and configured
+- **Terminal**: Supports color output and Unicode
+
+## 🛠️ Advanced Features
+
+### Escape Key Handling
+
+Press `ESC` at any time during the prompts to safely cancel the operation:
+
+```bash
+┌─ Operation Cancelled ───────────────────────────────────┐
+│ ⚠️  Operation cancelled by user (ESC pressed)           │
+│                                                         │
+│ Run the command again when you're ready to commit.     │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Smart Change Detection
+
+GitClean automatically detects if you have changes to commit:
+
+```bash
+$ gitclean
+⚠️  No changes to commit
+Make some changes and run `gitclean` again
+
+💡 Try these commands:
+• gitclean spellcheck "your text" - Test spell checker
+• gitclean test - Run spell checker tests
+• gitclean setup - Install git hooks
+```
+
+### Error Handling
+
+GitClean provides clear error messages and recovery suggestions:
+
+- **Not in a git repository**: Suggests running `git init`
+- **No remote repository**: Suggests adding a remote
+- **Push failures**: Shows the exact error from git
+
+## 📁 Project Structure
+
+```
+gitcleancommit/
+├── src/
+│   ├── index.ts           # CLI entry point and command definitions
+│   ├── prompt.ts          # Interactive prompt system with spell checking
+│   ├── git-integration.ts # Git operations (add, commit, push)
+│   ├── spellcheck.ts      # Spell checking engine and dictionary
+│   └── banner.ts          # ASCII art banner display
+├── dist/                  # Compiled JavaScript (generated)
+├── package.json           # Package configuration
+├── tsconfig.json          # TypeScript configuration
+├── setup.js              # Post-install setup script
+├── README.md             # This file
+└── LICENSE               # MIT License
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues and Solutions
+
+#### "Not in a git repository"
+
+```bash
+# Initialize a git repository
 git init
 ```
 
-**"No changes to commit"**
+#### "No changes to commit"
 
 ```bash
-# Check what files have changed
+# Check what has changed
 gitclean status
-
-# Or use git status
+# or
 git status
 ```
 
-**"Push failed"**
+#### "Push failed"
 
 ```bash
-# Make sure you have a remote repository set up
-git remote add origin <your-repo-url>
+# Add a remote repository
+git remote add origin https://github.com/username/repo.git
 
-# Or check existing remotes
+# Check current remotes
 git remote -v
+```
+
+#### "Command not found: gitclean"
+
+```bash
+# Reinstall globally
+npm install -g gitcleancommit
+
+# Or use npx
+npx gitcleancommit
+```
+
+#### Spell checker not working
+
+```bash
+# Check spell checker status
+gitclean spellcheck --verbose
+
+# Test with sample text
+gitclean test
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Here's how to get started:
+
+1. Fork the repository
+2. Clone your fork: `git clone https://github.com/yourusername/gitCleanCommit.git`
+3. Install dependencies: `npm install`
+4. Create a feature branch: `git checkout -b feature/amazing-feature`
+5. Make your changes
+6. Build the project: `npm run build`
+7. Test your changes: `npm start`
+8. Commit using GitClean: `npm start` 😉
+9. Push to your fork: `git push origin feature/amazing-feature`
+10. Create a Pull Request
+
+### Development Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/thissudhir/gitCleanCommit.git
+cd gitCleanCommit
+
+# Install dependencies
+npm install
+
+# Build the TypeScript files
+npm run build
+
+# Run in development mode
+npm run dev
+
+# Test the CLI locally
+npm start
 ```
 
 ## 📄 License
 
-MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
-- Inspired by conventional commits specification
-- Built with ❤️ for developers who love clean git history
-- Thanks to all contributors who make this tool better
+- Inspired by [Conventional Commits](https://www.conventionalcommits.org/) specification
+- Built with [Commander.js](https://github.com/tj/commander.js/) for CLI parsing
+- Uses [Inquirer.js](https://github.com/SBoudrias/Inquirer.js/) for interactive prompts
+- Spell checking powered by [Typo.js](https://github.com/cfinke/Typo.js)
+- Beautiful terminal output with [Chalk](https://github.com/chalk/chalk) and [Boxen](https://github.com/sindresorhus/boxen)
 
 ## 📞 Support
 
 - 🐛 [Report bugs](https://github.com/thissudhir/gitCleanCommit/issues)
 - 💡 [Request features](https://github.com/thissudhir/gitCleanCommit/issues)
 - 📖 [Documentation](https://github.com/thissudhir/gitCleanCommit#readme)
+- ⭐ [Star on GitHub](https://github.com/thissudhir/gitCleanCommit)
+
+## 🚀 What's Next?
+
+- [ ] Configurable commit types
+- [ ] Custom spell check dictionaries
+- [ ] Multi-language support
+- [ ] Integration with issue trackers
+- [ ] Commit message templates
+- [ ] AI-powered commit message suggestions
 
 ---
 
 **Made with ❤️ by [Abhishek](https://github.com/thissudhir)**
 
-_Happy committing! 🚀_
+_Happy committing! 🚀 May your git history always be clean and meaningful._
