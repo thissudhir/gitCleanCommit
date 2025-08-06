@@ -3,13 +3,8 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-
-export interface SpellCheckResult {
-  word: string;
-  suggestions: string[];
-  isCorrect: boolean;
-  position: { start: number; end: number };
-}
+import { SpellCheckResult, SpellCheckStats, SpellCheckError } from "./types/index.js";
+import { ConfigManager } from "./config/config-manager.js";
 
 export class GitCleanSpellChecker {
   private static dictionary: Typo | null = null;
@@ -442,9 +437,19 @@ export class GitCleanSpellChecker {
     if (this.isInitialized) return;
 
     try {
+      const config = ConfigManager.loadConfig();
+      
       // Initialize with built-in English dictionary
       // typo-js comes with en_US dictionary built-in
       this.dictionary = new Typo("en_US");
+      
+      // Add custom words from configuration
+      if (config.spellCheck?.customWords?.length) {
+        for (const word of config.spellCheck.customWords) {
+          this.TECHNICAL_WORDS.add(word.toLowerCase());
+        }
+      }
+      
       this.isInitialized = true;
       console.log("✅ Spell checker initialized successfully");
     } catch (error) {
@@ -459,6 +464,11 @@ export class GitCleanSpellChecker {
     message: string
   ): Promise<SpellCheckResult[]> {
     await this.initialize();
+
+    const config = ConfigManager.loadConfig();
+    if (!config.spellCheck?.enabled) {
+      return [];
+    }
 
     const results: SpellCheckResult[] = [];
     const words = this.extractWords(message);
@@ -589,12 +599,7 @@ export class GitCleanSpellChecker {
     return correctedText;
   }
 
-  public static getSpellCheckStats(): {
-    isInitialized: boolean;
-    hasDictionary: boolean;
-    technicalWordsCount: number;
-    typoRulesCount: number;
-  } {
+  public static getSpellCheckStats(): SpellCheckStats {
     return {
       isInitialized: this.isInitialized,
       hasDictionary: this.dictionary !== null,

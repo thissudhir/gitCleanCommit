@@ -8,7 +8,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run build && node dist/test/test-runner.js",
+    "test:watch": "npm run dev & node dist/test/test-runner.js --watch",
     "prepublishOnly": "npm run build",
     "prepare": "npm run build",
     "setup": "node setup.js"

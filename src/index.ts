@@ -9,14 +9,11 @@ import {
   getGitStatus,
 } from "./git-integration.js";
 import { GitCleanSpellChecker } from "./spellcheck.js";
+import { ErrorHandler } from "./utils/error-handler.js";
+import { ConfigManager } from "./config/config-manager.js";
+import { TemplateManager } from "./templates/template-manager.js";
 import chalk from "chalk";
 import boxen from "boxen";
-
-// Helper function to safely get error message
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
-}
 
 const program = new Command();
 
@@ -34,10 +31,7 @@ program
       await setupGitHook();
       console.log(chalk.green("✅ GitClean hooks installed successfully!"));
     } catch (error) {
-      console.error(
-        chalk.red("❌ Failed to install hooks:"),
-        getErrorMessage(error)
-      );
+      ErrorHandler.handleError(error, "Failed to install hooks");
       process.exit(1);
     }
   });
@@ -51,10 +45,7 @@ program
       await removeGitHook();
       console.log(chalk.green("✅ GitClean hooks removed successfully!"));
     } catch (error) {
-      console.error(
-        chalk.red("❌ Failed to remove hooks:"),
-        getErrorMessage(error)
-      );
+      ErrorHandler.handleError(error, "Failed to remove hooks");
       process.exit(1);
     }
   });
@@ -183,10 +174,156 @@ program
         );
       }
     } catch (error) {
-      console.error(
-        chalk.red("❌ Spell check failed:"),
-        getErrorMessage(error)
-      );
+      ErrorHandler.handleError(error, "Spell check failed");
+    }
+  });
+
+program
+  .command("config")
+  .description("Manage GitClean configuration")
+  .option("--init", "Create default configuration file")
+  .option("--show", "Show current configuration")
+  .option("--path", "Show configuration file path")
+  .action(async (options) => {
+    try {
+      if (options.init) {
+        ConfigManager.createDefaultConfig();
+        const configPath = ConfigManager.getCurrentConfigPath();
+        ErrorHandler.showSuccess(
+          "Default configuration file created successfully!",
+          [`Configuration saved to: ${configPath}`]
+        );
+      } else if (options.show) {
+        const config = ConfigManager.loadConfig();
+        console.log(
+          boxen(
+            chalk.blue("📋 Current GitClean Configuration\n\n") +
+              JSON.stringify(config, null, 2),
+            {
+              padding: 0.5,
+              margin: 0.5,
+              borderColor: "blue",
+              borderStyle: "round",
+              title: "Configuration",
+              titleAlignment: "center",
+            }
+          )
+        );
+      } else if (options.path) {
+        const configPath = ConfigManager.getCurrentConfigPath();
+        const exists = ConfigManager.configExists();
+        console.log(
+          boxen(
+            chalk.blue("📁 Configuration File Path\n\n") +
+              chalk.dim(`Path: ${configPath}\n`) +
+              chalk.dim(`Exists: ${exists ? "✅ Yes" : "❌ No"}`),
+            {
+              padding: 0.5,
+              margin: 0.5,
+              borderColor: "blue",
+              borderStyle: "round",
+              title: "Config Path",
+              titleAlignment: "center",
+            }
+          )
+        );
+      } else {
+        console.log(chalk.yellow("💡 Use --init, --show, or --path options"));
+        console.log(chalk.dim("Examples:"));
+        console.log(chalk.dim("  gitclean config --init   # Create default config"));
+        console.log(chalk.dim("  gitclean config --show   # Show current config"));
+        console.log(chalk.dim("  gitclean config --path   # Show config file path"));
+      }
+    } catch (error) {
+      ErrorHandler.handleError(error, "Configuration command failed");
+      process.exit(1);
+    }
+  });
+
+program
+  .command("templates")
+  .alias("tpl")
+  .description("Manage commit message templates")
+  .option("--list", "List all available templates")
+  .option("--add-defaults", "Add default templates to configuration")
+  .option("--show <name>", "Show specific template details")
+  .option("--remove <name>", "Remove a template")
+  .action(async (options) => {
+    try {
+      if (options.list) {
+        const templates = TemplateManager.getTemplates();
+        if (templates.length === 0) {
+          console.log(chalk.yellow("📝 No templates found"));
+          console.log(chalk.dim("Use --add-defaults to add default templates"));
+          return;
+        }
+
+        console.log(
+          boxen(
+            chalk.blue("📝 Available Templates\n\n") +
+              templates.map(template => 
+                `${chalk.green(template.name)}: ${template.type} - ${template.message}`
+              ).join("\n"),
+            {
+              padding: 0.5,
+              margin: 0.5,
+              borderColor: "blue",
+              borderStyle: "round",
+              title: "Commit Templates",
+              titleAlignment: "center",
+            }
+          )
+        );
+      } else if (options.addDefaults) {
+        const defaultTemplates = TemplateManager.getDefaultTemplates();
+        TemplateManager.addTemplatesToConfig(defaultTemplates);
+        ErrorHandler.showSuccess(
+          "Default templates added successfully!",
+          [`Added ${defaultTemplates.length} templates to configuration`]
+        );
+      } else if (options.show) {
+        const template = TemplateManager.getTemplate(options.show);
+        if (!template) {
+          console.log(chalk.red(`❌ Template "${options.show}" not found`));
+          return;
+        }
+
+        console.log(
+          boxen(
+            chalk.blue(`📋 Template: ${template.name}\n\n`) +
+              chalk.dim(`Type: ${template.type}\n`) +
+              chalk.dim(`Message: ${template.message}\n`) +
+              (template.scope ? chalk.dim(`Scope: ${template.scope}\n`) : "") +
+              (template.body ? chalk.dim(`Body: ${template.body}\n`) : "") +
+              chalk.dim(`Breaking: ${template.breaking ? "Yes" : "No"}`),
+            {
+              padding: 0.5,
+              margin: 0.5,
+              borderColor: "blue",
+              borderStyle: "round",
+              title: "Template Details",
+              titleAlignment: "center",
+            }
+          )
+        );
+      } else if (options.remove) {
+        const removed = TemplateManager.removeTemplate(options.remove);
+        if (removed) {
+          ErrorHandler.showSuccess(`Template "${options.remove}" removed successfully!`);
+        } else {
+          console.log(chalk.red(`❌ Template "${options.remove}" not found`));
+        }
+      } else {
+        console.log(chalk.yellow("💡 Use --list, --add-defaults, --show <name>, or --remove <name>"));
+        console.log(chalk.dim("Examples:"));
+        console.log(chalk.dim("  gitclean templates --list"));
+        console.log(chalk.dim("  gitclean templates --add-defaults"));
+        console.log(chalk.dim("  gitclean templates --show feature"));
+        console.log(chalk.dim("  gitclean templates --remove bugfix"));
+      }
+    } catch (error) {
+      ErrorHandler.handleError(error, "Template command failed");
+      process.exit(1);
     }
   });
 

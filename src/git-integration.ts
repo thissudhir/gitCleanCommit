@@ -3,12 +3,9 @@ import { writeFileSync, readFileSync, existsSync, chmodSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
 import ora from "ora";
-
-// Helper function to safely get error message
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
-}
+import { GitOperationError, GitWorkingDirectory } from "./types/index.js";
+import { ErrorHandler } from "./utils/error-handler.js";
+import { ConfigManager } from "./config/config-manager.js";
 
 export function findGitRoot(): string {
   try {
@@ -17,7 +14,7 @@ export function findGitRoot(): string {
     }).trim();
     return gitRoot;
   } catch (error) {
-    throw new Error("Not in a git repository");
+    throw new GitOperationError("Not in a git repository", error instanceof Error ? error : undefined);
   }
 }
 
@@ -28,7 +25,7 @@ export function getCurrentBranch(): string {
     }).trim();
     return branch;
   } catch (error) {
-    throw new Error("Failed to get current branch");
+    throw new GitOperationError("Failed to get current branch", error instanceof Error ? error : undefined);
   }
 }
 
@@ -81,7 +78,7 @@ export function executeGitAdd(files: string[] = ["."]): void {
     spinner.succeed(`Files added: ${files.join(", ")}`);
   } catch (error) {
     spinner.fail("Failed to add files");
-    throw error;
+    throw new GitOperationError("Failed to add files", error instanceof Error ? error : undefined);
   }
 }
 
@@ -184,16 +181,13 @@ export async function executeFullGitWorkflow(
   } catch (error) {
     console.error(
       chalk.red("\n❌ GitClean workflow failed:"),
-      getErrorMessage(error)
+      ErrorHandler.getErrorMessage(error)
     );
     throw error;
   }
 }
 
-export function checkWorkingDirectory(): {
-  hasChanges: boolean;
-  hasStagedFiles: boolean;
-} {
+export function checkWorkingDirectory(): GitWorkingDirectory {
   try {
     // Check for unstaged changes
     const unstagedChanges = execSync("git diff --name-only", {
@@ -212,7 +206,7 @@ export function checkWorkingDirectory(): {
   } catch (error) {
     console.error(
       chalk.red("Failed to check working directory:"),
-      getErrorMessage(error)
+      ErrorHandler.getErrorMessage(error)
     );
     return { hasChanges: false, hasStagedFiles: false };
   }
@@ -224,7 +218,7 @@ export function getGitStatus(): string {
   } catch (error) {
     console.error(
       chalk.red("Failed to get git status:"),
-      getErrorMessage(error)
+      ErrorHandler.getErrorMessage(error)
     );
     return "";
   }
