@@ -12,6 +12,12 @@ import { GitCleanSpellChecker } from "./spellcheck.js";
 import { ErrorHandler } from "./utils/error-handler.js";
 import { ConfigManager } from "./config/config-manager.js";
 import { TemplateManager } from "./templates/template-manager.js";
+import { CommitAnalyticsManager } from "./analytics/commit-analytics.js";
+import { AutoDetectionEngine } from "./smart/auto-detection.js";
+import { ConfigValidator } from "./validation/config-validator-simple.js";
+import { CacheManager } from "./cache/cache-manager.js";
+import { CommitPreview } from "./preview/commit-preview.js";
+import { PluginManager } from "./plugins/plugin-manager.js";
 import chalk from "chalk";
 import boxen from "boxen";
 
@@ -20,7 +26,7 @@ const program = new Command();
 program
   .name("gitclean")
   .description("Clean, conventional commits made easy")
-  .version("1.0.5", "-v, --version", "Show version information");
+  .version("2.0.0", "-v, --version", "Show version information");
 
 program
   .command("setup")
@@ -395,6 +401,187 @@ program
         }
       )
     );
+  });
+
+// New enhanced commands
+program
+  .command("analytics")
+  .alias("stats")
+  .description("Show commit analytics and patterns")
+  .option("--limit <number>", "Number of commits to analyze", "100")
+  .action(async (options) => {
+    try {
+      console.log(chalk.blue("📊 Analyzing commit history..."));
+
+      const commits = await CommitAnalyticsManager.getCommitHistory(parseInt(options.limit));
+      const analytics = CommitAnalyticsManager.generateAnalytics(commits);
+
+      CommitAnalyticsManager.displayAnalytics(analytics);
+    } catch (error) {
+      ErrorHandler.handleError(error, "Failed to generate analytics");
+    }
+  });
+
+program
+  .command("smart")
+  .description("Show smart suggestions for current changes")
+  .action(async () => {
+    try {
+      console.log(chalk.blue("🧠 Analyzing current changes..."));
+
+      const suggestions = await AutoDetectionEngine.getSuggestionsForCurrentChanges();
+
+      if (suggestions.length === 0) {
+        console.log(chalk.yellow("No suggestions available"));
+        return;
+      }
+
+      console.log(
+        boxen(
+          chalk.blue.bold("🎯 Smart Suggestions\n\n") +
+          suggestions.map(s =>
+            chalk.white(`${s.type}${s.scope ? `(${s.scope})` : ''}: ${s.suggestedMessage || 'suggested change'}\n`) +
+            chalk.dim(`Confidence: ${(s.confidence * 100).toFixed(1)}%\n`) +
+            chalk.dim(`Reason: ${s.reason}\n`)
+          ).join('\n'),
+          {
+            padding: 1,
+            margin: 1,
+            borderStyle: "round",
+            borderColor: "blue"
+          }
+        )
+      );
+    } catch (error) {
+      ErrorHandler.handleError(error, "Failed to analyze changes");
+    }
+  });
+
+program
+  .command("validate")
+  .description("Validate configuration file")
+  .option("--config <path>", "Config file path")
+  .action(async (options) => {
+    try {
+      const configPath = options.config || ConfigManager.getCurrentConfigPath();
+      const result = ConfigValidator.validateConfigFile(configPath);
+
+      ConfigValidator.displayValidationResult(result);
+    } catch (error) {
+      ErrorHandler.handleError(error, "Validation failed");
+    }
+  });
+
+program
+  .command("cache")
+  .description("Manage cache")
+  .option("--clear [namespace]", "Clear cache (optionally by namespace)")
+  .option("--stats", "Show cache statistics")
+  .option("--cleanup", "Clean up expired cache entries")
+  .action(async (options) => {
+    try {
+      if (options.clear !== undefined) {
+        const deleted = CacheManager.clear(options.clear || undefined);
+        console.log(chalk.green(`✅ Cleared ${deleted} cache entries`));
+      } else if (options.stats) {
+        const stats = CacheManager.getStats();
+        console.log(
+          boxen(
+            chalk.blue.bold("📊 Cache Statistics\n\n") +
+            chalk.dim(`Total entries: ${stats.totalEntries}\n`) +
+            chalk.dim(`Total size: ${(stats.totalSize / 1024).toFixed(2)} KB\n`) +
+            chalk.dim(`Hit rate: ${stats.hitRate.toFixed(1)}%\n`) +
+            chalk.dim(`Miss rate: ${stats.missRate.toFixed(1)}%\n`) +
+            (stats.oldestEntry ? chalk.dim(`Oldest entry: ${stats.oldestEntry.toLocaleString()}\n`) : '') +
+            (stats.newestEntry ? chalk.dim(`Newest entry: ${stats.newestEntry.toLocaleString()}`) : ''),
+            {
+              padding: 1,
+              margin: 1,
+              borderStyle: "round",
+              borderColor: "blue"
+            }
+          )
+        );
+      } else if (options.cleanup) {
+        const deleted = CacheManager.cleanupExpired();
+        console.log(chalk.green(`✅ Cleaned up ${deleted} expired cache entries`));
+      } else {
+        console.log(chalk.yellow("Use --clear, --stats, or --cleanup"));
+      }
+    } catch (error) {
+      ErrorHandler.handleError(error, "Cache operation failed");
+    }
+  });
+
+program
+  .command("preview")
+  .description("Preview commit message in different formats")
+  .option("--format <format>", "Format: standard, github, gitlab, conventional, detailed", "standard")
+  .option("--emoji", "Include emojis")
+  .option("--stats", "Show change statistics")
+  .action(async (options) => {
+    try {
+      // Mock answers for preview - in real implementation, this would come from prompts
+      const mockAnswers = {
+        type: 'feat',
+        scope: 'ui',
+        message: 'add dark mode toggle',
+        body: 'Implements dark mode toggle in the settings panel with theme persistence',
+        breaking: false,
+        issues: '123'
+      };
+
+      await CommitPreview.displayInteractivePreview(mockAnswers, {
+        format: options.format,
+        includeEmoji: options.emoji,
+        showStats: options.stats
+      });
+    } catch (error) {
+      ErrorHandler.handleError(error, "Preview failed");
+    }
+  });
+
+program
+  .command("plugins")
+  .description("Manage plugins")
+  .option("--list", "List installed plugins")
+  .option("--enable <name>", "Enable a plugin")
+  .option("--disable <name>", "Disable a plugin")
+  .option("--install <package>", "Install a plugin package")
+  .option("--uninstall <package>", "Uninstall a plugin package")
+  .option("--create <name>", "Create plugin template")
+  .action(async (options) => {
+    try {
+      await PluginManager.initialize();
+
+      if (options.list) {
+        PluginManager.listPlugins();
+      } else if (options.enable) {
+        const success = PluginManager.enablePlugin(options.enable);
+        if (success) {
+          console.log(chalk.green(`✅ Plugin enabled: ${options.enable}`));
+        } else {
+          console.log(chalk.red(`❌ Plugin not found: ${options.enable}`));
+        }
+      } else if (options.disable) {
+        const success = PluginManager.disablePlugin(options.disable);
+        if (success) {
+          console.log(chalk.green(`✅ Plugin disabled: ${options.disable}`));
+        } else {
+          console.log(chalk.red(`❌ Plugin not found: ${options.disable}`));
+        }
+      } else if (options.install) {
+        await PluginManager.installPlugin(options.install);
+      } else if (options.uninstall) {
+        await PluginManager.uninstallPlugin(options.uninstall);
+      } else if (options.create) {
+        PluginManager.createPluginTemplate(options.create, process.cwd());
+      } else {
+        console.log(chalk.yellow("Use --list, --enable, --disable, --install, --uninstall, or --create"));
+      }
+    } catch (error) {
+      ErrorHandler.handleError(error, "Plugin operation failed");
+    }
   });
 
 // Default action - show banner and prompt for commit

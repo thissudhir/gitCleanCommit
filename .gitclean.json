@@ -1,0 +1,61 @@
+{
+  "commitTypes": [
+    {
+      "name": "ADD          - Add new code or files",
+      "value": "ADD",
+      "color": "green",
+      "emoji": "➕",
+      "description": "Added new code or files"
+    },
+    {
+      "name": "FIX          - A bug fix",
+      "value": "FIX",
+      "color": "red",
+      "emoji": "🐛",
+      "description": "A bug fix"
+    },
+    {
+      "name": "UPDATE       - Updated a file or code",
+      "value": "UPDATE",
+      "color": "yellow",
+      "emoji": "🔄",
+      "description": "Updated a file or code"
+    },
+    {
+      "name": "DOCS         - Documentation changes",
+      "value": "DOCS",
+      "color": "blue",
+      "emoji": "📚",
+      "description": "Documentation only changes"
+    },
+    {
+      "name": "TEST         - Adding tests",
+      "value": "TEST",
+      "color": "cyan",
+      "emoji": "✅",
+      "description": "Adding missing tests or correcting existing tests"
+    },
+    {
+      "name": "REMOVE       - Removing code or files",
+      "value": "REMOVE",
+      "color": "redBright",
+      "emoji": "🗑️",
+      "description": "Removing code or files"
+    }
+  ],
+  "spellCheck": {
+    "enabled": true,
+    "debounceMs": 200,
+    "customWords": [],
+    "disabledWords": []
+  },
+  "workflow": {
+    "autoAdd": true,
+    "autoPush": true,
+    "addFiles": [
+      "."
+    ]
+  },
+  "templates": [],
+  "preCommitHooks": []
+}
