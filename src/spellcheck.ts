@@ -446,10 +446,10 @@ export class GitCleanSpellChecker {
       // typo-js comes with en_US dictionary built-in
       this.dictionary = new Typo("en_US");
       this.isInitialized = true;
-      console.log("✅ Spell checker initialized successfully");
+      console.log("Spell checker initialized successfully");
     } catch (error) {
       console.warn(
-        "⚠️  Warning: Could not initialize full dictionary. Using fallback mode."
+        "Warning: Could not initialize full dictionary. Using fallback mode."
       );
       this.isInitialized = true; // Continue with typo detection only
     }

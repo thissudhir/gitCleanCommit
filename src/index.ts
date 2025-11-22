@@ -32,10 +32,10 @@ program
   .action(async () => {
     try {
       await setupGitHook();
-      console.log(chalk.green("✅ GitClean hooks installed successfully!"));
+      console.log(chalk.green("GitClean hooks installed successfully!"));
     } catch (error) {
       console.error(
-        chalk.red("❌ Failed to install hooks:"),
+        chalk.red("Failed to install hooks:"),
         getErrorMessage(error)
       );
       process.exit(1);
@@ -49,10 +49,10 @@ program
   .action(async () => {
     try {
       await removeGitHook();
-      console.log(chalk.green("✅ GitClean hooks removed successfully!"));
+      console.log(chalk.green("GitClean hooks removed successfully!"));
     } catch (error) {
       console.error(
-        chalk.red("❌ Failed to remove hooks:"),
+        chalk.red("Failed to remove hooks:"),
         getErrorMessage(error)
       );
       process.exit(1);
@@ -75,10 +75,10 @@ program
   .action(() => {
     const status = getGitStatus();
     if (status.trim()) {
-      console.log(chalk.blue("📋 Git Status:"));
+      console.log(chalk.blue("Git Status:"));
       console.log(status);
     } else {
-      console.log(chalk.green("✅ Working directory clean"));
+      console.log(chalk.green("Working directory clean"));
     }
   });
 
@@ -95,10 +95,10 @@ program
       const stats = GitCleanSpellChecker.getSpellCheckStats();
       console.log(
         boxen(
-          chalk.blue("📊 Spell Checker Information\n\n") +
-            chalk.dim(`Initialized: ${stats.isInitialized ? "✅" : "❌"}\n`) +
+          chalk.blue("Spell Checker Information\n\n") +
+            chalk.dim(`Initialized: ${stats.isInitialized ? "Yes" : "No"}\n`) +
             chalk.dim(
-              `Dictionary: ${stats.hasDictionary ? "✅ Loaded" : "⚠️  Fallback mode"}\n`
+              `Dictionary: ${stats.hasDictionary ? "Loaded" : "Fallback mode"}\n`
             ) +
             chalk.dim(`Technical words: ${stats.technicalWordsCount}\n`) +
             chalk.dim(`Typo correction rules: ${stats.typoRulesCount}\n\n`) +
@@ -122,13 +122,13 @@ program
     if (!text) {
       console.log(
         chalk.yellow(
-          '💡 Tip: Provide text to check: gitclean spellcheck "your text here"'
+          'Tip: Provide text to check: gitclean spellcheck "your text here"'
         )
       );
       return;
     }
 
-    console.log(chalk.blue("\n🔍 Checking spelling...\n"));
+    console.log(chalk.blue("\nChecking spelling...\n"));
 
     try {
       const results = await GitCleanSpellChecker.checkSpelling(text);
@@ -136,7 +136,7 @@ program
       if (results.length === 0) {
         console.log(
           boxen(
-            chalk.green("✅ No spelling issues found!\n\n") +
+            chalk.green("No spelling issues found!\n\n") +
               chalk.dim(`Checked text: "${text}"`),
             {
               padding: 0.5,
@@ -157,11 +157,11 @@ program
         const correctedText = await GitCleanSpellChecker.autoCorrectText(text);
 
         const resultContent = [
-          chalk.yellow("⚠️  Spelling issues found:\n"),
+          chalk.yellow("Spelling issues found:\n"),
           chalk.dim("Original: ") + textWithUnderlines,
           chalk.dim("Corrected: ") + chalk.green(correctedText),
           "",
-          chalk.blue("📝 Issues found:"),
+          chalk.blue("Issues found:"),
           ...results.map((error) => {
             const suggestions =
               error.suggestions.length > 0
@@ -184,7 +184,7 @@ program
       }
     } catch (error) {
       console.error(
-        chalk.red("❌ Spell check failed:"),
+        chalk.red("Spell check failed:"),
         getErrorMessage(error)
       );
     }
@@ -211,7 +211,7 @@ program
 
     console.log(
       boxen(
-        chalk.blue("🧪 Running Spell Checker Tests\n\n") +
+        chalk.blue("Running Spell Checker Tests\n\n") +
           chalk.dim("Testing with common development-related text..."),
         {
           padding: 0.5,
@@ -231,18 +231,18 @@ program
       const results = await GitCleanSpellChecker.checkSpelling(testText);
 
       if (results.length === 0) {
-        console.log(chalk.green("   ✅ No issues found"));
+        console.log(chalk.green("   No issues found"));
       } else {
         const corrected = await GitCleanSpellChecker.autoCorrectText(testText);
-        console.log(chalk.red(`   ❌ Found ${results.length} issue(s)`));
-        console.log(chalk.yellow(`   🔧 Corrected: "${corrected}"`));
+        console.log(chalk.red(`   Found ${results.length} issue(s)`));
+        console.log(chalk.yellow(`   Corrected: "${corrected}"`));
       }
     }
 
     const stats = GitCleanSpellChecker.getSpellCheckStats();
     console.log(
       boxen(
-        chalk.green("✅ Test completed!\n\n") +
+        chalk.green("Test completed!\n\n") +
           chalk.dim(
             `Dictionary status: ${stats.hasDictionary ? "Active" : "Fallback mode"}\n`
           ) +
@@ -267,9 +267,9 @@ program.action(async () => {
   // Check if there are any changes to commit
   const status = getGitStatus();
   if (!status.trim()) {
-    console.log(chalk.yellow("⚠️  No changes to commit"));
+    console.log(chalk.yellow("No changes to commit"));
     console.log(chalk.dim("Make some changes and run `gitclean` again"));
-    console.log(chalk.dim("\n💡 Try these commands:"));
+    console.log(chalk.dim("\nTry these commands:"));
     console.log(
       chalk.dim('• gitclean spellcheck "your text" - Test spell checker')
     );
@@ -278,7 +278,7 @@ program.action(async () => {
     return;
   }
 
-  console.log(chalk.blue("🔍 Found changes to commit"));
+  console.log(chalk.blue("Found changes to commit"));
   console.log(chalk.dim("This will: git add . → git commit → git push\n"));
 
   await promptCommit();

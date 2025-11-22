@@ -164,11 +164,11 @@ export async function executeFullGitWorkflow(
     // Check if there are any changes to commit
     const status = getGitStatus();
     if (!status.trim()) {
-      console.log(chalk.yellow("⚠️  No changes to commit"));
+      console.log(chalk.yellow("No changes to commit"));
       return;
     }
 
-    console.log(chalk.blue("\n🚀 Starting GitClean workflow...\n"));
+    console.log(chalk.blue("\nStarting GitClean workflow...\n"));
 
     // Step 1: Add files
     executeGitAdd(files);
@@ -179,11 +179,11 @@ export async function executeFullGitWorkflow(
     // Step 3: Push
     await executeGitPush();
 
-    console.log(chalk.green("\n✅ GitClean workflow completed successfully!"));
-    console.log(chalk.dim(`📦 Changes pushed to ${getCurrentBranch()}\n`));
+    console.log(chalk.green("\nGitClean workflow completed successfully!"));
+    console.log(chalk.dim(`Changes pushed to ${getCurrentBranch()}\n`));
   } catch (error) {
     console.error(
-      chalk.red("\n❌ GitClean workflow failed:"),
+      chalk.red("\nGitClean workflow failed:"),
       getErrorMessage(error)
     );
     throw error;

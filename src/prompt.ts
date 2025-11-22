@@ -9,7 +9,6 @@ interface CommitType {
   name: string;
   value: string;
   color: keyof typeof chalk;
-  emoji: string;
   description: string;
 }
 
@@ -18,42 +17,36 @@ const COMMIT_TYPES: CommitType[] = [
     name: `${chalk.green("ADD")}          - Add new code or files`,
     value: "ADD",
     color: "green",
-    emoji: "➕",
     description: "Added new code or files",
   },
   {
     name: `${chalk.red("FIX")}          - A bug fix`,
     value: "FIX",
     color: "red",
-    emoji: "🐛",
     description: "A bug fix",
   },
   {
     name: `${chalk.yellow("UPDATE")}       - Updated a file or code`,
     value: "UPDATE",
     color: "yellow",
-    emoji: "🔄",
     description: "Updated a file or code",
   },
   {
     name: `${chalk.blue("DOCS")}         - Documentation changes`,
     value: "DOCS",
     color: "blue",
-    emoji: "📚",
     description: "Documentation only changes",
   },
   {
     name: `${chalk.cyan("TEST")}         - Adding tests`,
     value: "TEST",
     color: "cyan",
-    emoji: "✅",
     description: "Adding missing tests or correcting existing tests",
   },
   {
     name: `${chalk.redBright("REMOVE")}       - Removing code or files`,
     value: "REMOVE",
     color: "redBright",
-    emoji: "🗑️",
     description: "Removing code or files",
   },
 ];
@@ -220,7 +213,7 @@ inquirer.registerPrompt("spellcheck", SpellCheckPrompt as any);
 
 function handleEscapeKey(): void {
   const exitBox = boxen(
-    chalk.yellow("⚠️  Operation cancelled by user (ESC pressed)") +
+    chalk.yellow("Operation cancelled by user (ESC pressed)") +
       "\n\n" +
       chalk.dim("Run the command again when you're ready to commit."),
     {
@@ -258,14 +251,14 @@ function formatCommitMessage(
   breaking?: boolean,
   issues?: string
 ): string {
-  let message = `${type.emoji} ${(chalk[type.color] as (text: string) => string)(header)}`;
+  let message = `${(chalk[type.color] as (text: string) => string)(header)}`;
 
   if (body) {
     message += `\n\n${chalk.dim(body)}`;
   }
 
   if (breaking) {
-    message += `\n\n${chalk.redBright("💥 BREAKING CHANGE:")} ${chalk.redBright(
+    message += `\n\n${chalk.redBright("BREAKING CHANGE:")} ${chalk.redBright(
       header
     )}`;
   }
@@ -284,7 +277,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
   await GitCleanSpellChecker.initialize();
 
   console.log(
-    chalk.blue("🔤 Real-time spell checking enabled for text inputs!\n")
+    chalk.blue("Real-time spell checking enabled for text inputs!\n")
   );
 
   try {
@@ -297,7 +290,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         choices: COMMIT_TYPES.map((type) => ({
           name: type.name,
           value: type.value,
-          short: `${type.emoji} ${type.value}`,
+          short: type.value,
         })),
         pageSize: 10,
       },
@@ -399,7 +392,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       if (hookFile) {
         writeFileSync(hookFile, fullCommit);
         console.log(
-          boxen(chalk.green("✅ Commit message created successfully!"), {
+          boxen(chalk.green("Commit message created successfully!"), {
             padding: 0.5,
             margin: 0.5,
             borderColor: "green",
@@ -411,7 +404,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
           await executeFullGitWorkflow(commitHeader, answers.body);
         } catch (error) {
           console.error(
-            boxen(chalk.red("❌ Failed to complete git workflow"), {
+            boxen(chalk.red("Failed to complete git workflow"), {
               padding: 0.5,
               margin: 0.5,
               borderColor: "red",
@@ -423,7 +416,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       }
     } else {
       console.log(
-        boxen(chalk.yellow("❌ Operation cancelled"), {
+        boxen(chalk.yellow("Operation cancelled"), {
           padding: 0.5,
           margin: 0.5,
           borderColor: "yellow",
