@@ -11,6 +11,7 @@
 - **Complete Git Workflow**: Single command to stage, commit, and push changes
 - **Interactive Commit Builder**: Guided prompts for creating well-structured commits
 - **Real-time Spell Checking**: Live spell checking as you type with visual feedback
+- **Configurable Commit Types**: Customize commit types via `.gitclean.config.json`
 - **Conventional Commits**: Enforces conventional commit standards
 - **Beautiful Terminal UI**: Colorful interface with boxes, spinners, and progress indicators
 - **Git Hook Integration**: Seamless integration with git's prepare-commit-msg hook
@@ -132,9 +133,31 @@ gitclean --version
 gitclean -v
 ```
 
+### `gitclean config init`
+
+Initialize a configuration file with default settings:
+
+```bash
+gitclean config init
+```
+
+This creates a `.gitclean.config.json` file in your current directory where you can customize:
+
+- Commit types (add, remove, or modify)
+- Commit type colors
+- Spell checker settings
+
+### `gitclean config show`
+
+Display your current configuration:
+
+```bash
+gitclean config show
+```
+
 ## Commit Types
 
-GitClean supports six conventional commit types, each with its own color:
+GitClean supports six default conventional commit types, each with its own color:
 
 | Type     | Color      | Description                      | Example                               |
 | -------- | ---------- | -------------------------------- | ------------------------------------- |
@@ -144,6 +167,45 @@ GitClean supports six conventional commit types, each with its own color:
 | `DOCS`   | Blue       | Documentation changes only       | `DOCS: add API usage examples`        |
 | `TEST`   | Cyan       | Add or update tests              | `TEST: add unit tests for validators` |
 | `REMOVE` | Bright Red | Remove code, files, or features  | `REMOVE: deprecated API endpoints`    |
+
+### Customizing Commit Types
+
+You can customize commit types to match your team's workflow:
+
+1. **Initialize config file**:
+
+   ```bash
+   gitclean config init
+   ```
+
+2. **Edit `.gitclean.config.json`**:
+
+   ```json
+   {
+     "commitTypes": [
+       {
+         "name": "FEATURE",
+         "value": "FEATURE",
+         "color": "magenta",
+         "description": "Add a new feature"
+       },
+       {
+         "name": "HOTFIX",
+         "value": "HOTFIX",
+         "color": "redBright",
+         "description": "Critical production fix"
+       }
+     ]
+   }
+   ```
+
+3. **Available colors**: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `gray`, `redBright`, `greenBright`, `yellowBright`, `blueBright`, `magentaBright`, `cyanBright`, `whiteBright`
+
+4. **View your config**:
+
+   ```bash
+   gitclean config show
+   ```
 
 ## Real-time Spell Checking
 
@@ -249,7 +311,7 @@ $ gitclean
 │                                                         │
 │ BREAKING CHANGE: implement JWT token validation         │
 │                                                         │
-│ fixes #123, closes #456                            │
+│ fixes #123, closes #456                                 │
 └─────────────────────────────────────────────────────────┘
 
 ? Ready to commit? Yes
@@ -377,7 +439,31 @@ The git hook integration:
 
 ## Configuration
 
-GitClean works with zero configuration! However, here are some behaviors to note:
+GitClean works with zero configuration! However, you can customize it to match your workflow.
+
+### Creating a Configuration File
+
+To customize commit types and other settings, create a `.gitclean.config.json` file:
+
+```bash
+gitclean config init
+```
+
+This creates a configuration file in your project root. See the [Customizing Commit Types](#customizing-commit-types) section above for examples and available options.
+
+### Configuration Options
+
+The configuration file supports:
+
+- **commitTypes**: Array of custom commit types (see [Customizing Commit Types](#customizing-commit-types))
+  - `name`: Display name
+  - `value`: Value used in commit message
+  - `color`: Terminal color
+  - `description`: Description shown in prompt
+
+- **spellCheck**: Spell checker settings
+  - `enabled`: Enable/disable spell checking (default: `true`)
+  - `debounceMs`: Delay before spell check runs (default: `150`ms)
 
 ### Default Behaviors
 
@@ -419,6 +505,7 @@ Try these commands:
 • gitclean spellcheck "your text" - Test spell checker
 • gitclean test - Run spell checker tests
 • gitclean setup - Install git hooks
+• gitclean config init - Create config file
 ```
 
 ### Error Handling
@@ -438,8 +525,12 @@ gitcleancommit/
 │   ├── prompt.ts          # Interactive prompt system with spell checking
 │   ├── git-integration.ts # Git operations (add, commit, push)
 │   ├── spellcheck.ts      # Spell checking engine and dictionary
-│   └── banner.ts          # ASCII art banner display
+│   ├── config.ts          # Configuration management
+│   ├── banner.ts          # ASCII art banner display
+│   └── types/
+│       └── typo-js.d.ts   # TypeScript definitions for typo-js
 ├── dist/                  # Compiled JavaScript (generated)
+├── .gitclean.config.json  # Optional: User configuration file (create with 'gitclean config init')
 ├── package.json           # Package configuration
 ├── tsconfig.json          # TypeScript configuration
 ├── setup.js              # Post-install setup script
@@ -553,7 +644,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## What's Next?
 
-- [ ] Configurable commit types
+- [x] Configurable commit types
+- [x] Improved spell checker performance
 - [ ] Custom spell check dictionaries
 - [ ] Multi-language support
 - [ ] Integration with issue trackers

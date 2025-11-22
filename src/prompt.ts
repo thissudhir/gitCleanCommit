@@ -4,52 +4,13 @@ import { GitCleanSpellChecker, SpellCheckResult } from "./spellcheck.js";
 import { executeFullGitWorkflow } from "./git-integration.js";
 import { writeFileSync } from "fs";
 import boxen from "boxen";
+import {
+  getCommitTypes,
+  getCommitTypeConfig,
+  CommitTypeConfig,
+} from "./config.js";
 
-interface CommitType {
-  name: string;
-  value: string;
-  color: keyof typeof chalk;
-  description: string;
-}
 
-const COMMIT_TYPES: CommitType[] = [
-  {
-    name: `${chalk.green("ADD")}          - Add new code or files`,
-    value: "ADD",
-    color: "green",
-    description: "Added new code or files",
-  },
-  {
-    name: `${chalk.red("FIX")}          - A bug fix`,
-    value: "FIX",
-    color: "red",
-    description: "A bug fix",
-  },
-  {
-    name: `${chalk.yellow("UPDATE")}       - Updated a file or code`,
-    value: "UPDATE",
-    color: "yellow",
-    description: "Updated a file or code",
-  },
-  {
-    name: `${chalk.blue("DOCS")}         - Documentation changes`,
-    value: "DOCS",
-    color: "blue",
-    description: "Documentation only changes",
-  },
-  {
-    name: `${chalk.cyan("TEST")}         - Adding tests`,
-    value: "TEST",
-    color: "cyan",
-    description: "Adding missing tests or correcting existing tests",
-  },
-  {
-    name: `${chalk.redBright("REMOVE")}       - Removing code or files`,
-    value: "REMOVE",
-    color: "redBright",
-    description: "Removing code or files",
-  },
-];
 
 // Custom inquirer prompt with real-time spell checking
 class SpellCheckPrompt {
@@ -71,6 +32,7 @@ class SpellCheckPrompt {
   private status: string;
   private done!: (value: string) => void;
   private keypressListener: any;
+  private spellCheckTimeout: NodeJS.Timeout | null = null;
 
   run(): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -138,6 +100,12 @@ class SpellCheckPrompt {
   }
 
   private cleanup(): void {
+    // Clear any pending spell check timeout
+    if (this.spellCheckTimeout) {
+      clearTimeout(this.spellCheckTimeout);
+      this.spellCheckTimeout = null;
+    }
+    
     if (this.keypressListener) {
       process.stdin.removeListener("keypress", this.keypressListener);
       this.keypressListener = null;
@@ -148,13 +116,20 @@ class SpellCheckPrompt {
   }
 
   private async performSpellCheck(): Promise<void> {
+    // Clear any existing timeout to prevent lag
+    if (this.spellCheckTimeout) {
+      clearTimeout(this.spellCheckTimeout);
+      this.spellCheckTimeout = null;
+    }
+
+    // Immediately clear errors if text is empty - no debounce needed
     if (this.currentText.length === 0) {
       this.spellErrors = [];
       return;
     }
 
-    clearTimeout((this as any).spellCheckTimeout);
-    (this as any).spellCheckTimeout = setTimeout(async () => {
+    // Debounce spell checking for better performance
+    this.spellCheckTimeout = setTimeout(async () => {
       try {
         this.spellErrors = await GitCleanSpellChecker.checkSpelling(
           this.currentText
@@ -164,7 +139,7 @@ class SpellCheckPrompt {
         // Silent error handling for spell check
         this.spellErrors = [];
       }
-    }, 200);
+    }, 150); // Reduced from 200ms to 150ms for better responsiveness
   }
 
   private render(): void {
@@ -245,7 +220,7 @@ function setupEscapeHandler(): void {
 }
 
 function formatCommitMessage(
-  type: CommitType,
+  type: CommitTypeConfig,
   header: string,
   body?: string,
   breaking?: boolean,
@@ -287,11 +262,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         name: "type",
         type: "list",
         message: "Select the type of change you're committing:",
-        choices: COMMIT_TYPES.map((type) => ({
-          name: type.name,
-          value: type.value,
-          short: type.value,
-        })),
+        choices: getCommitTypes(),
         pageSize: 10,
       },
       {
@@ -335,10 +306,8 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       },
     ]);
 
-    // Find the selected commit type
-    const selectedType = COMMIT_TYPES.find(
-      (type) => type.value === answers.type
-    )!;
+    // Find the selected commit type from config
+    const selectedType = getCommitTypeConfig(answers.type);
 
     // Build the commit message parts
     const breakingPrefix = answers.breaking ? "!" : "";
