@@ -370,7 +370,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         );
       } else {
         try {
-          await executeFullGitWorkflow(commitHeader, answers.body);
+          await executeFullGitWorkflow(fullCommit);
         } catch (error) {
           console.error(
             boxen(chalk.red("Failed to complete git workflow"), {

@@ -85,18 +85,19 @@ export function executeGitAdd(files: string[] = ["."]): void {
   }
 }
 
-export function executeGitCommit(
-  message: string,
-  body?: string
-): Promise<void> {
+export function executeGitCommit(message: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const spinner = ora("Creating commit...").start();
 
     try {
-      const args = ["commit", "-m", message];
-      if (body) {
-        args.push("-m", body);
-      }
+      // Split the message by double newlines to get separate paragraphs
+      // Each paragraph becomes a separate -m argument for proper formatting
+      const messageParts = message.split("\n\n").filter((part) => part.trim());
+
+      const args = ["commit"];
+      messageParts.forEach((part) => {
+        args.push("-m", part.trim());
+      });
 
       const result = spawn("git", args, { stdio: "pipe" });
 
@@ -153,8 +154,7 @@ export function executeGitPush(): Promise<void> {
 }
 
 export async function executeFullGitWorkflow(
-  commitMessage: string,
-  commitBody?: string,
+  fullCommitMessage: string,
   files: string[] = ["."]
 ): Promise<void> {
   try {
@@ -173,8 +173,8 @@ export async function executeFullGitWorkflow(
     // Step 1: Add files
     executeGitAdd(files);
 
-    // Step 2: Commit
-    await executeGitCommit(commitMessage, commitBody);
+    // Step 2: Commit with the full message
+    await executeGitCommit(fullCommitMessage);
 
     // Step 3: Push
     await executeGitPush();

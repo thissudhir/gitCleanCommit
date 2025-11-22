@@ -28,7 +28,7 @@ const program = new Command();
 program
   .name("gitclean")
   .description("Clean, conventional commits made easy")
-  .version("1.1.1", "-v, --version", "Show version information");
+  .version("1.1.2", "-v, --version", "Show version information");
 
 program
   .command("setup")
@@ -107,7 +107,9 @@ configCommand
             ) +
             chalk.blue("Default commit types:\n") +
             getDefaultCommitTypes()
-              .map((type) => chalk.dim(`  • ${type.value} - ${type.description}`))
+              .map((type) =>
+                chalk.dim(`  • ${type.value} - ${type.description}`)
+              )
               .join("\n"),
           {
             padding: 0.5,
@@ -120,17 +122,12 @@ configCommand
         )
       );
     } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes("already exists")
-      ) {
+      if (error instanceof Error && error.message.includes("already exists")) {
         console.log(
           boxen(
             chalk.yellow("Configuration file already exists\n\n") +
               chalk.dim(".gitclean.config.json is already present\n") +
-              chalk.dim(
-                'Use "gitclean config show" to view current settings'
-              ),
+              chalk.dim('Use "gitclean config show" to view current settings'),
             {
               padding: 0.5,
               margin: 0.5,
@@ -158,14 +155,17 @@ configCommand
     try {
       const configString = getConfigAsString();
       console.log(
-        boxen(chalk.cyan("Current Configuration:\n\n") + chalk.dim(configString), {
-          padding: 0.5,
-          margin: 0.5,
-          borderColor: "cyan",
-          borderStyle: "round",
-          title: "GitClean Config",
-          titleAlignment: "center",
-        })
+        boxen(
+          chalk.cyan("Current Configuration:\n\n") + chalk.dim(configString),
+          {
+            padding: 0.5,
+            margin: 0.5,
+            borderColor: "cyan",
+            borderStyle: "round",
+            title: "GitClean Config",
+            titleAlignment: "center",
+          }
+        )
       );
     } catch (error) {
       console.error(
@@ -277,10 +277,7 @@ program
         );
       }
     } catch (error) {
-      console.error(
-        chalk.red("Spell check failed:"),
-        getErrorMessage(error)
-      );
+      console.error(chalk.red("Spell check failed:"), getErrorMessage(error));
     }
   });
 
