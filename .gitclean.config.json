@@ -1,0 +1,50 @@
+{
+  "commitTypes": [
+    {
+      "name": "ADD",
+      "value": "ADD",
+      "color": "green",
+      "description": "Add new code or files"
+    },
+    {
+      "name": "FIX",
+      "value": "FIX",
+      "color": "red",
+      "description": "A bug fix"
+    },
+    {
+      "name": "UPDATE",
+      "value": "UPDATE",
+      "color": "yellow",
+      "description": "Update a file or code"
+    },
+    {
+      "name": "DOCS",
+      "value": "DOCS",
+      "color": "blue",
+      "description": "Documentation changes"
+    },
+    {
+      "name": "TEST",
+      "value": "TEST",
+      "color": "cyan",
+      "description": "Adding tests"
+    },
+    {
+      "name": "REMOVE",
+      "value": "REMOVE",
+      "color": "redBright",
+      "description": "Remove code or files"
+    }
+  ],
+  "spellCheck": {
+    "enabled": true,
+    "debounceMs": 150
+  },
+  "prompts": {
+    "scope": true,
+    "body": false,
+    "breaking": true,
+    "issues": true
+  }
+}

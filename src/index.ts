@@ -28,7 +28,7 @@ const program = new Command();
 program
   .name("gitclean")
   .description("Clean, conventional commits made easy")
-  .version("1.1.2", "-v, --version", "Show version information");
+  .version("1.1.3", "-v, --version", "Show version information");
 
 program
   .command("setup")

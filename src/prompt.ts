@@ -8,6 +8,7 @@ import {
   getCommitTypes,
   getCommitTypeConfig,
   CommitTypeConfig,
+  loadConfig,
 } from "./config.js";
 
 
@@ -251,13 +252,22 @@ export async function promptCommit(hookFile?: string): Promise<void> {
   // Initialize spell checker
   await GitCleanSpellChecker.initialize();
 
+  // Load configuration
+  const config = loadConfig();
+  const promptsConfig = config.prompts || {
+    scope: true,
+    body: false,
+    breaking: false,
+    issues: false,
+  };
+
   console.log(
     chalk.blue("Real-time spell checking enabled for text inputs!\n")
   );
 
   try {
-    // All questions in one inquirer.prompt with real-time spell checking
-    const answers = await inquirer.prompt([
+    // Build questions array based on config
+    const questions: any[] = [
       {
         name: "type",
         type: "list",
@@ -265,46 +275,67 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         choices: getCommitTypes(),
         pageSize: 10,
       },
-      {
+    ];
+
+    // Conditionally add scope prompt
+    if (promptsConfig.scope) {
+      questions.push({
         name: "scope",
         type: "input",
         message: "What is the scope of this change? (optional):",
         filter: (input: string) => input.trim(),
+      });
+    }
+
+    // Always add message prompt (required)
+    questions.push({
+      name: "message",
+      type: "spellcheck" as any,
+      message: "Write a short, commit message:",
+      validate: (input: string) => {
+        if (input.trim().length < 1) {
+          return "Please enter a commit message.";
+        }
+        if (input.trim().length > 72) {
+          return "Keep the first line under 72 characters.";
+        }
+        return true;
       },
-      {
-        name: "message",
-        type: "spellcheck" as any,
-        message: "Write a short, commit message:",
-        validate: (input: string) => {
-          if (input.trim().length < 1) {
-            return "Please enter a commit message.";
-          }
-          if (input.trim().length > 72) {
-            return "Keep the first line under 72 characters.";
-          }
-          return true;
-        },
-        filter: (input: string) => input.trim(),
-      },
-      {
+      filter: (input: string) => input.trim(),
+    });
+
+    // Conditionally add body prompt
+    if (promptsConfig.body) {
+      questions.push({
         name: "body",
         type: "spellcheck" as any,
         message: "Provide a longer description (optional):",
         filter: (input: string) => input.trim(),
-      },
-      {
+      });
+    }
+
+    // Conditionally add breaking changes prompt
+    if (promptsConfig.breaking) {
+      questions.push({
         name: "breaking",
         type: "confirm",
         message: "Are there any breaking changes?",
         default: false,
-      },
-      {
+      });
+    }
+
+    // Conditionally add issues prompt
+    if (promptsConfig.issues) {
+      questions.push({
         name: "issues",
         type: "input",
         message: 'Add issue references (e.g., "fixes #123", "closes #456"):',
         filter: (input: string) => input.trim(),
-      },
-    ]);
+      });
+    }
+
+    // Prompt user with configured questions
+    const answers = await inquirer.prompt(questions);
 
     // Find the selected commit type from config
     const selectedType = getCommitTypeConfig(answers.type);

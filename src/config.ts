@@ -15,6 +15,12 @@ export interface GitCleanConfig {
     enabled?: boolean;
     debounceMs?: number;
   };
+  prompts?: {
+    scope?: boolean;
+    body?: boolean;
+    breaking?: boolean;
+    issues?: boolean;
+  };
 }
 
 const DEFAULT_COMMIT_TYPES: CommitTypeConfig[] = [
@@ -62,6 +68,12 @@ const DEFAULT_CONFIG: GitCleanConfig = {
     enabled: true,
     debounceMs: 150,
   },
+  prompts: {
+    scope: true,
+    body: false,
+    breaking: false,
+    issues: false,
+  },
 };
 
 
@@ -86,6 +98,12 @@ export function loadConfig(): GitCleanConfig {
       spellCheck: {
         enabled: userConfig.spellCheck?.enabled ?? true,
         debounceMs: userConfig.spellCheck?.debounceMs ?? 150,
+      },
+      prompts: {
+        scope: userConfig.prompts?.scope ?? true,
+        body: userConfig.prompts?.body ?? false,
+        breaking: userConfig.prompts?.breaking ?? false,
+        issues: userConfig.prompts?.issues ?? false,
       },
     };
   } catch (error) {
