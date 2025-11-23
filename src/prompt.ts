@@ -20,6 +20,7 @@ class SpellCheckPrompt {
     this.rl = readLine;
     this.answers = answers;
     this.currentText = "";
+    this.cursorPosition = 0;
     this.spellErrors = [];
     this.status = "pending";
     this.keypressListener = null;
@@ -29,11 +30,13 @@ class SpellCheckPrompt {
   private rl: any;
   private answers: any;
   private currentText: string;
+  private cursorPosition: number = 0;
   private spellErrors: SpellCheckResult[];
   private status: string;
   private done!: (value: string) => void;
   private keypressListener: any;
   private spellCheckTimeout: NodeJS.Timeout | null = null;
+  private previousLineCount: number = 1;
 
   run(): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -58,6 +61,7 @@ class SpellCheckPrompt {
           if (validation !== true) {
             console.log(chalk.red(`>> ${validation}`));
             this.currentText = "";
+            this.cursorPosition = 0;
             this.spellErrors = [];
             this.render();
             this.setupKeyHandlers();
@@ -81,11 +85,51 @@ class SpellCheckPrompt {
         process.exit(0);
       }
 
+      // Handle arrow key navigation
+      if (key.name === "left") {
+        if (this.cursorPosition > 0) {
+          this.cursorPosition--;
+          this.render();
+        }
+        return;
+      }
+
+      if (key.name === "right") {
+        if (this.cursorPosition < this.currentText.length) {
+          this.cursorPosition++;
+          this.render();
+        }
+        return;
+      }
+
+      // Handle home/end keys
+      if (key.name === "home") {
+        this.cursorPosition = 0;
+        this.render();
+        return;
+      }
+
+      if (key.name === "end") {
+        this.cursorPosition = this.currentText.length;
+        this.render();
+        return;
+      }
+
       // Handle text input
       if (key.name === "backspace") {
-        this.currentText = this.currentText.slice(0, -1);
+        if (this.cursorPosition > 0) {
+          this.currentText = 
+            this.currentText.slice(0, this.cursorPosition - 1) + 
+            this.currentText.slice(this.cursorPosition);
+          this.cursorPosition--;
+        }
       } else if (str && str.length === 1 && !key.ctrl && !key.meta) {
-        this.currentText += str;
+        // Insert character at cursor position
+        this.currentText = 
+          this.currentText.slice(0, this.cursorPosition) + 
+          str + 
+          this.currentText.slice(this.cursorPosition);
+        this.cursorPosition++;
       }
 
       await this.performSpellCheck();
@@ -135,7 +179,10 @@ class SpellCheckPrompt {
         this.spellErrors = await GitCleanSpellChecker.checkSpelling(
           this.currentText
         );
-        this.render();
+        // Only render if we're still in pending status (not answered yet)
+        if (this.status === "pending") {
+          this.render();
+        }
       } catch (error) {
         // Silent error handling for spell check
         this.spellErrors = [];
@@ -146,16 +193,71 @@ class SpellCheckPrompt {
   private render(): void {
     if (this.status === "answered") return;
 
-    // Clear current line
-    process.stdout.write("\r\x1b[K");
+    // First, move cursor back to the start of the first line of our previous render
+    // We need to move up (previousLineCount - 1) lines
+    if (this.previousLineCount > 1) {
+      process.stdout.write(`\x1b[${this.previousLineCount - 1}A`);
+    }
+    
+    // Now clear all lines from the previous render
+    for (let i = 0; i < this.previousLineCount; i++) {
+      process.stdout.write("\r\x1b[K"); // Clear current line
+      if (i < this.previousLineCount - 1) {
+        process.stdout.write("\n"); // Move to next line
+      }
+    }
+    
+    // Move cursor back to the start
+    if (this.previousLineCount > 1) {
+      process.stdout.write(`\x1b[${this.previousLineCount - 1}A`);
+    }
+    process.stdout.write("\r");
 
     // Show question
     const questionText = this.question.message;
-    process.stdout.write(`${chalk.cyan("?")} ${chalk.bold(questionText)} `);
+    const promptPrefix = `${chalk.cyan("?")} ${chalk.bold(questionText)} `;
+    process.stdout.write(promptPrefix);
 
-    // Show text with spell checking
+    // Show text with spell checking and cursor
     const displayText = this.createDisplayText();
     process.stdout.write(displayText);
+    
+    // Calculate how many lines we're using NOW (for next render)
+    // Get terminal width (default to 80 if not available)
+    const terminalWidth = process.stdout.columns || 80;
+    // Strip ANSI codes to get actual text length for line calculation
+    const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, '');
+    const promptLength = stripAnsi(promptPrefix).length;
+    const textLength = this.currentText.length;
+    const totalLength = promptLength + textLength;
+    this.previousLineCount = Math.ceil(totalLength / terminalWidth);
+    
+    // Move cursor to correct position accounting for line wrapping
+    const cursorAbsolutePosition = promptLength + this.cursorPosition;
+    const endAbsolutePosition = promptLength + textLength;
+    
+    // Calculate which line the cursor should be on (0-indexed from current line)
+    const cursorLine = Math.floor(cursorAbsolutePosition / terminalWidth);
+    const endLine = Math.floor(endAbsolutePosition / terminalWidth);
+    
+    // Calculate column position on that line
+    const cursorColumn = cursorAbsolutePosition % terminalWidth;
+    const endColumn = endAbsolutePosition % terminalWidth;
+    
+    // Move cursor to correct position
+    if (endLine > cursorLine) {
+      // Need to move up lines
+      const linesToMoveUp = endLine - cursorLine;
+      process.stdout.write(`\x1b[${linesToMoveUp}A`);
+      // Then move to correct column (from start of line)
+      if (cursorColumn > 0) {
+        process.stdout.write(`\x1b[${cursorColumn}C`);
+      }
+    } else if (endColumn > cursorColumn) {
+      // Same line, just move back
+      const charsToMoveBack = endColumn - cursorColumn;
+      process.stdout.write(`\x1b[${charsToMoveBack}D`);
+    }
   }
 
   private createDisplayText(): string {
@@ -261,10 +363,6 @@ export async function promptCommit(hookFile?: string): Promise<void> {
     issues: false,
   };
 
-  console.log(
-    chalk.blue("Real-time spell checking enabled for text inputs!\n")
-  );
-
   try {
     // Build questions array based on config
     const questions: any[] = [
@@ -274,6 +372,9 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         message: "Select the type of change you're committing:",
         choices: getCommitTypes(),
         pageSize: 10,
+        theme: {
+          helpMode: "never",
+        },
       },
     ];
 

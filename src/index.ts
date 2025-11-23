@@ -371,7 +371,7 @@ program.action(async () => {
   }
 
   console.log(chalk.blue("Found changes to commit"));
-  console.log(chalk.dim("This will: git add . → git commit → git push\n"));
+  // console.log(chalk.dim("This will: git add . → git commit → git push\n"));
 
   await promptCommit();
 });
