@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
+import { homedir } from "os";
 import chalk from "chalk";
 
 export interface CommitTypeConfig {
@@ -76,44 +77,86 @@ const DEFAULT_CONFIG: GitCleanConfig = {
   },
 };
 
+/**
+ * Get the path to the global config file in the user's home directory
+ */
+function getGlobalConfigPath(): string {
+  return join(homedir(), ".gitclean.config.json");
+}
 
-function getConfigPath(): string {
+/**
+ * Get the path to the project-specific config file
+ */
+function getProjectConfigPath(): string {
   return join(process.cwd(), ".gitclean.config.json");
 }
 
-export function loadConfig(): GitCleanConfig {
-  const configPath = getConfigPath();
-
+/**
+ * Load and parse a config file from the given path
+ */
+function loadConfigFromPath(configPath: string): GitCleanConfig | null {
   if (!existsSync(configPath)) {
-    return DEFAULT_CONFIG;
+    return null;
   }
 
   try {
     const configContent = readFileSync(configPath, "utf-8");
-    const userConfig: GitCleanConfig = JSON.parse(configContent);
-
-    // Merge with defaults to ensure all required fields exist
-    return {
-      commitTypes: userConfig.commitTypes || DEFAULT_CONFIG.commitTypes,
-      spellCheck: {
-        enabled: userConfig.spellCheck?.enabled ?? true,
-        debounceMs: userConfig.spellCheck?.debounceMs ?? 150,
-      },
-      prompts: {
-        scope: userConfig.prompts?.scope ?? true,
-        body: userConfig.prompts?.body ?? false,
-        breaking: userConfig.prompts?.breaking ?? false,
-        issues: userConfig.prompts?.issues ?? false,
-      },
-    };
+    return JSON.parse(configContent);
   } catch (error) {
     console.warn(
       chalk.yellow(
-        `Warning: Could not parse .gitclean.config.json. Using defaults.`
+        `Warning: Could not parse config at ${configPath}. Skipping.`
       )
     );
-    return DEFAULT_CONFIG;
+    return null;
   }
+}
+
+/**
+ * Merge two configs, with the override config taking precedence
+ */
+function mergeConfigs(base: GitCleanConfig, override: GitCleanConfig): GitCleanConfig {
+  return {
+    commitTypes: override.commitTypes ?? base.commitTypes,
+    spellCheck: {
+      enabled: override.spellCheck?.enabled ?? base.spellCheck?.enabled ?? true,
+      debounceMs: override.spellCheck?.debounceMs ?? base.spellCheck?.debounceMs ?? 150,
+    },
+    prompts: {
+      scope: override.prompts?.scope ?? base.prompts?.scope ?? true,
+      body: override.prompts?.body ?? base.prompts?.body ?? false,
+      breaking: override.prompts?.breaking ?? base.prompts?.breaking ?? false,
+      issues: override.prompts?.issues ?? base.prompts?.issues ?? false,
+    },
+  };
+}
+
+/**
+ * Load configuration with the following precedence:
+ * 1. Project-specific config (.gitclean.config.json in current directory)
+ * 2. Global config (~/.gitclean.config.json)
+ * 3. Default config
+ */
+export function loadConfig(): GitCleanConfig {
+  const globalConfigPath = getGlobalConfigPath();
+  const projectConfigPath = getProjectConfigPath();
+
+  // Start with default config
+  let config = DEFAULT_CONFIG;
+
+  // Load global config if it exists
+  const globalConfig = loadConfigFromPath(globalConfigPath);
+  if (globalConfig) {
+    config = mergeConfigs(config, globalConfig);
+  }
+
+  // Load project config if it exists (overrides global)
+  const projectConfig = loadConfigFromPath(projectConfigPath);
+  if (projectConfig) {
+    config = mergeConfigs(config, projectConfig);
+  }
+
+  return config;
 }
 
 export function getCommitTypes(): Array<{
@@ -140,8 +183,8 @@ export function getCommitTypeConfig(value: string): CommitTypeConfig {
   );
 }
 
-export function initializeConfig(): void {
-  const configPath = getConfigPath();
+export function initializeConfig(global: boolean = false): void {
+  const configPath = global ? getGlobalConfigPath() : getProjectConfigPath();
 
   if (existsSync(configPath)) {
     throw new Error("Config file already exists at " + configPath);

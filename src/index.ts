@@ -28,7 +28,7 @@ const program = new Command();
 program
   .name("gitclean")
   .description("Clean, conventional commits made easy")
-  .version("1.1.3", "-v, --version", "Show version information");
+  .version("1.2.0", "-v, --version", "Show version information");
 
 program
   .command("setup")
@@ -95,13 +95,25 @@ const configCommand = program
 configCommand
   .command("init")
   .description("Initialize .gitclean.config.json with default settings")
-  .action(() => {
+  .option("-g, --global", "Create global config in home directory instead of project directory")
+  .action((options) => {
     try {
-      initializeConfig();
+      const isGlobal = options.global || false;
+      initializeConfig(isGlobal);
+      
+      const configLocation = isGlobal 
+        ? "~/.gitclean.config.json (global config)"
+        : ".gitclean.config.json (project config)";
+      
       console.log(
         boxen(
           chalk.green("Configuration file created successfully!\n\n") +
-            chalk.dim(".gitclean.config.json created in current directory\n") +
+            chalk.dim(`${configLocation} created\n`) +
+            chalk.dim(
+              isGlobal 
+                ? "This config will be used across all projects\n"
+                : "This config will override global settings for this project\n"
+            ) +
             chalk.dim(
               "You can now customize commit types and other settings\n\n"
             ) +
@@ -123,10 +135,11 @@ configCommand
       );
     } catch (error) {
       if (error instanceof Error && error.message.includes("already exists")) {
+        const configPath = error.message.split("at ")[1];
         console.log(
           boxen(
             chalk.yellow("Configuration file already exists\n\n") +
-              chalk.dim(".gitclean.config.json is already present\n") +
+              chalk.dim(`Config is already present at:\n${configPath}\n\n`) +
               chalk.dim('Use "gitclean config show" to view current settings'),
             {
               padding: 0.5,

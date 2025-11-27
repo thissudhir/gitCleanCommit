@@ -24,7 +24,10 @@ npx gitcleancommit
 # Create a commit (streamlined 3-step workflow)
 gitclean
 
-# Initialize configuration file (optional)
+# Initialize global configuration (applies to all projects)
+gitclean config init --global
+
+# Initialize project-specific configuration (overrides global)
 gitclean config init
 
 # View current configuration
@@ -77,15 +80,42 @@ Result: `ADD(auth): implement JWT token validation`
 
 ## Configuration
 
+### Global vs Project-Specific Config
+
+GitClean supports two levels of configuration:
+
+1. **Global Config** (`~/.gitclean.config.json`) - Applies to all projects
+2. **Project Config** (`.gitclean.config.json`) - Overrides global settings for specific projects
+
+```bash
+# Create global config (recommended for personal defaults)
+gitclean config init --global
+
+# Create project-specific config (overrides global)
+gitclean config init
+```
+
+**Config Hierarchy**: Project → Global → Defaults
+
 ### Enable Additional Prompts
 
 Want more fields? Create a config file:
 
 ```bash
-gitclean config init
+gitclean config init --global  # or without --global for project-only
 ```
 
-Then edit `.gitclean.config.json`:
+Then edit the config file:
+
+```bash
+# Edit global config
+nano ~/.gitclean.config.json
+
+# Or edit project-specific config
+nano .gitclean.config.json
+```
+
+Example configuration:
 
 ```json
 {
@@ -145,8 +175,16 @@ gitclean
 Initialize a configuration file with default settings:
 
 ```bash
+# Create global config (applies to all projects)
+gitclean config init --global
+
+# Create project-specific config (current directory only)
 gitclean config init
 ```
+
+**Options:**
+- `-g, --global`: Create config in home directory (`~/.gitclean.config.json`)
+- Without flag: Create config in current directory (`.gitclean.config.json`)
 
 ### `gitclean config show`
 
