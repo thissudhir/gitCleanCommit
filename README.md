@@ -1,4 +1,4 @@
-# GitClean CLI
+![Image](https://github.com/user-attachments/assets/85c1dbf3-2d32-475c-bb1b-db30971d50c8)
 
 > A beautiful CLI tool for creating clean, conventional git commits with real-time spell checking and seamless git workflow automation
 
