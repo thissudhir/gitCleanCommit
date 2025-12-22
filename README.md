@@ -2,11 +2,13 @@
 
 > A beautiful CLI tool for creating clean, conventional git commits with real-time spell checking and seamless git workflow automation
 
-![Image](https://github.com/user-attachments/assets/e2301fb0-71f6-4f2c-86e1-e946e09a0a11)
-
 [![npm version](https://badge.fury.io/js/gitcleancommit.svg)](https://badge.fury.io/js/gitcleancommit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
+
+## Demo
+
+![Image](https://github.com/user-attachments/assets/84fcd915-cdb4-40b2-b54d-17f99e831511)
 
 ## Quick Start
 
