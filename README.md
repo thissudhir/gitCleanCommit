@@ -190,6 +190,20 @@ gitclean config init
 - `-g, --global`: Create config in home directory (`~/.gitclean.config.json`)
 - Without flag: Create config in current directory (`.gitclean.config.json`)
 
+### `gitclean ai`
+
+Automatically generate a conventional commit message based on your staged changes:
+
+```bash
+gitclean ai
+```
+
+1. Shows the GitClean banner
+2. Checks for uncommitted changes
+3. Displays a loading spinner while generating the message
+4. Presents the AI-suggested message for confirmation/editing
+5. Continues with the standard commit workflow
+
 ### `gitclean config show`
 
 Display your current configuration:
@@ -359,6 +373,12 @@ The configuration file supports:
   - `breaking`: Show breaking changes prompt (default: `false`)
   - `issues`: Show issue references prompt (default: `false`)
 
+- **ai**: AI-powered commit message settings
+  - `provider`: AI provider (`"gemini"`, `"openai"`, `"deepseek"`, or `"custom"`)
+  - `model`: Model name (e.g., `"gemini-1.5-flash"`, `"gpt-4o"`, `"deepseek-chat"`)
+  - `apiKey`: Your API Key (can also be set via environment variables like `GEMINI_API_KEY`)
+  - `baseURL`: Custom API endpoint (useful for DeepSeek or local LLMs)
+
 ---
 
 ## Requirements
@@ -412,7 +432,7 @@ npx gitcleancommit
 We welcome contributions! Here's how to get started:
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/yourusername/gitCleanCommit.git`
+2. Clone your fork: `git clone https://github.com/thissudhir/gitCleanCommit.git`
 3. Install dependencies: `npm install`
 4. Create a feature branch: `git checkout -b feature/amazing-feature`
 5. Make your changes

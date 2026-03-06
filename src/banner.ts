@@ -33,5 +33,5 @@ export function showBanner(): void {
   } else {
     console.log(chalk.whiteBright(fullBanner));
   }
-  console.log(chalk.dim("  Clean, conventional commits made easy\n"));
+  console.log(chalk.dim("Clean, conventional commits made easy\n"));
 }

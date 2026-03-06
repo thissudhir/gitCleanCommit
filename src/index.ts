@@ -14,8 +14,10 @@ import {
   getConfigAsString,
   getDefaultCommitTypes,
 } from "./config.js";
+import { AiGenerator } from "./ai-generator.js";
 import chalk from "chalk";
 import boxen from "boxen";
+import ora from "ora";
 
 // Helper function to safely get error message
 function getErrorMessage(error: unknown): string {
@@ -100,29 +102,29 @@ configCommand
     try {
       const isGlobal = options.global || false;
       initializeConfig(isGlobal);
-      
-      const configLocation = isGlobal 
+
+      const configLocation = isGlobal
         ? "~/.gitclean.config.json (global config)"
         : ".gitclean.config.json (project config)";
-      
+
       console.log(
         boxen(
           chalk.green("Configuration file created successfully!\n\n") +
-            chalk.dim(`${configLocation} created\n`) +
-            chalk.dim(
-              isGlobal 
-                ? "This config will be used across all projects\n"
-                : "This config will override global settings for this project\n"
-            ) +
-            chalk.dim(
-              "You can now customize commit types and other settings\n\n"
-            ) +
-            chalk.blue("Default commit types:\n") +
-            getDefaultCommitTypes()
-              .map((type) =>
-                chalk.dim(`  • ${type.value} - ${type.description}`)
-              )
-              .join("\n"),
+          chalk.dim(`${configLocation} created\n`) +
+          chalk.dim(
+            isGlobal
+              ? "This config will be used across all projects\n"
+              : "This config will override global settings for this project\n"
+          ) +
+          chalk.dim(
+            "You can now customize commit types and other settings\n\n"
+          ) +
+          chalk.blue("Default commit types:\n") +
+          getDefaultCommitTypes()
+            .map((type) =>
+              chalk.dim(`  • ${type.value} - ${type.description}`)
+            )
+            .join("\n"),
           {
             padding: 0.5,
             margin: 0.5,
@@ -139,8 +141,8 @@ configCommand
         console.log(
           boxen(
             chalk.yellow("Configuration file already exists\n\n") +
-              chalk.dim(`Config is already present at:\n${configPath}\n\n`) +
-              chalk.dim('Use "gitclean config show" to view current settings'),
+            chalk.dim(`Config is already present at:\n${configPath}\n\n`) +
+            chalk.dim('Use "gitclean config show" to view current settings'),
             {
               padding: 0.5,
               margin: 0.5,
@@ -203,17 +205,17 @@ program
       console.log(
         boxen(
           chalk.blue("Spell Checker Information\n\n") +
-            chalk.dim(`Initialized: ${stats.isInitialized ? "Yes" : "No"}\n`) +
-            chalk.dim(
-              `Dictionary: ${stats.hasDictionary ? "Loaded" : "Fallback mode"}\n`
-            ) +
-            chalk.dim(`Technical words: ${stats.technicalWordsCount}\n`) +
-            chalk.dim(`Typo correction rules: ${stats.typoRulesCount}\n\n`) +
-            chalk.yellow("This spell checker is optimized for:\n") +
-            chalk.dim("• Git commit messages\n") +
-            chalk.dim("• Programming terminology\n") +
-            chalk.dim("• Common development terms\n") +
-            chalk.dim("• Technical abbreviations"),
+          chalk.dim(`Initialized: ${stats.isInitialized ? "Yes" : "No"}\n`) +
+          chalk.dim(
+            `Dictionary: ${stats.hasDictionary ? "Loaded" : "Fallback mode"}\n`
+          ) +
+          chalk.dim(`Technical words: ${stats.technicalWordsCount}\n`) +
+          chalk.dim(`Typo correction rules: ${stats.typoRulesCount}\n\n`) +
+          chalk.yellow("This spell checker is optimized for:\n") +
+          chalk.dim("• Git commit messages\n") +
+          chalk.dim("• Programming terminology\n") +
+          chalk.dim("• Common development terms\n") +
+          chalk.dim("• Technical abbreviations"),
           {
             padding: 0.5,
             margin: 0.5,
@@ -244,7 +246,7 @@ program
         console.log(
           boxen(
             chalk.green("No spelling issues found!\n\n") +
-              chalk.dim(`Checked text: "${text}"`),
+            chalk.dim(`Checked text: "${text}"`),
             {
               padding: 0.5,
               margin: 0.5,
@@ -295,6 +297,35 @@ program
   });
 
 program
+  .command("ai")
+  .description("Generate a conventional commit message using AI")
+  .action(async () => {
+    showBanner();
+    try {
+      const message = await AiGenerator.generateCommitMessage();
+
+      // After generation, we should probably confirm and then commit
+      console.log(
+        boxen(chalk.green("AI Generated Message:\n\n") + chalk.white(message), {
+          padding: 0.5,
+          margin: 0.5,
+          borderColor: "green",
+          borderStyle: "round",
+          title: "AI Suggestion",
+          titleAlignment: "center",
+        })
+      );
+
+      // We need a way to use this message in the workflow
+      // I'll update promptCommit to accept an initial message
+      await promptCommit(undefined, message);
+    } catch (error) {
+      console.error(chalk.red("Generation failed:"), getErrorMessage(error));
+      process.exit(1);
+    }
+  });
+
+program
   .command("test")
   .description("Run spell checker tests with sample text")
   .action(async () => {
@@ -316,7 +347,7 @@ program
     console.log(
       boxen(
         chalk.blue("Running Spell Checker Tests\n\n") +
-          chalk.dim("Testing with common development-related text..."),
+        chalk.dim("Testing with common development-related text..."),
         {
           padding: 0.5,
           margin: 0.5,
@@ -347,11 +378,11 @@ program
     console.log(
       boxen(
         chalk.green("Test completed!\n\n") +
-          chalk.dim(
-            `Dictionary status: ${stats.hasDictionary ? "Active" : "Fallback mode"}\n`
-          ) +
-          chalk.dim(`Total technical terms: ${stats.technicalWordsCount}\n`) +
-          chalk.dim(`Total typo rules: ${stats.typoRulesCount}`),
+        chalk.dim(
+          `Dictionary status: ${stats.hasDictionary ? "Active" : "Fallback mode"}\n`
+        ) +
+        chalk.dim(`Total technical terms: ${stats.technicalWordsCount}\n`) +
+        chalk.dim(`Total typo rules: ${stats.typoRulesCount}`),
         {
           padding: 0.5,
           margin: 0.5,

@@ -22,6 +22,12 @@ export interface GitCleanConfig {
     breaking?: boolean;
     issues?: boolean;
   };
+  ai?: {
+    provider?: "gemini" | "openai" | "deepseek" | "custom";
+    model?: string;
+    apiKey?: string;
+    baseURL?: string;
+  };
 }
 
 const DEFAULT_COMMIT_TYPES: CommitTypeConfig[] = [
@@ -75,6 +81,10 @@ const DEFAULT_CONFIG: GitCleanConfig = {
     breaking: false,
     issues: false,
   },
+  ai: {
+    provider: "gemini",
+    model: "gemini-1.5-flash",
+  },
 };
 
 /**
@@ -127,6 +137,12 @@ function mergeConfigs(base: GitCleanConfig, override: GitCleanConfig): GitCleanC
       body: override.prompts?.body ?? base.prompts?.body ?? false,
       breaking: override.prompts?.breaking ?? base.prompts?.breaking ?? false,
       issues: override.prompts?.issues ?? base.prompts?.issues ?? false,
+    },
+    ai: {
+      provider: override.ai?.provider ?? base.ai?.provider ?? "gemini",
+      model: override.ai?.model ?? base.ai?.model,
+      apiKey: override.ai?.apiKey ?? base.ai?.apiKey,
+      baseURL: override.ai?.baseURL ?? base.ai?.baseURL,
     },
   };
 }

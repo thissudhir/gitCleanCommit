@@ -43,11 +43,13 @@
   },
   "homepage": "https://github.com/thissudhir/gitCleanCommit#readme",
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",
     "commander": "^12.1.0",
     "figlet": "^1.8.1",
     "inquirer": "^12.7.0",
+    "openai": "^6.27.0",
     "ora": "^8.2.0",
     "typo-js": "^1.2.4"
   },

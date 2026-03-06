@@ -10,6 +10,7 @@ import {
   CommitTypeConfig,
   loadConfig,
 } from "./config.js";
+import { AiGenerator } from "./ai-generator.js";
 
 
 
@@ -118,16 +119,16 @@ class SpellCheckPrompt {
       // Handle text input
       if (key.name === "backspace") {
         if (this.cursorPosition > 0) {
-          this.currentText = 
-            this.currentText.slice(0, this.cursorPosition - 1) + 
+          this.currentText =
+            this.currentText.slice(0, this.cursorPosition - 1) +
             this.currentText.slice(this.cursorPosition);
           this.cursorPosition--;
         }
       } else if (str && str.length === 1 && !key.ctrl && !key.meta) {
         // Insert character at cursor position
-        this.currentText = 
-          this.currentText.slice(0, this.cursorPosition) + 
-          str + 
+        this.currentText =
+          this.currentText.slice(0, this.cursorPosition) +
+          str +
           this.currentText.slice(this.cursorPosition);
         this.cursorPosition++;
       }
@@ -150,7 +151,7 @@ class SpellCheckPrompt {
       clearTimeout(this.spellCheckTimeout);
       this.spellCheckTimeout = null;
     }
-    
+
     if (this.keypressListener) {
       process.stdin.removeListener("keypress", this.keypressListener);
       this.keypressListener = null;
@@ -198,7 +199,7 @@ class SpellCheckPrompt {
     if (this.previousLineCount > 1) {
       process.stdout.write(`\x1b[${this.previousLineCount - 1}A`);
     }
-    
+
     // Now clear all lines from the previous render
     for (let i = 0; i < this.previousLineCount; i++) {
       process.stdout.write("\r\x1b[K"); // Clear current line
@@ -206,7 +207,7 @@ class SpellCheckPrompt {
         process.stdout.write("\n"); // Move to next line
       }
     }
-    
+
     // Move cursor back to the start
     if (this.previousLineCount > 1) {
       process.stdout.write(`\x1b[${this.previousLineCount - 1}A`);
@@ -221,7 +222,7 @@ class SpellCheckPrompt {
     // Show text with spell checking and cursor
     const displayText = this.createDisplayText();
     process.stdout.write(displayText);
-    
+
     // Calculate how many lines we're using NOW (for next render)
     // Get terminal width (default to 80 if not available)
     const terminalWidth = process.stdout.columns || 80;
@@ -231,19 +232,19 @@ class SpellCheckPrompt {
     const textLength = this.currentText.length;
     const totalLength = promptLength + textLength;
     this.previousLineCount = Math.ceil(totalLength / terminalWidth);
-    
+
     // Move cursor to correct position accounting for line wrapping
     const cursorAbsolutePosition = promptLength + this.cursorPosition;
     const endAbsolutePosition = promptLength + textLength;
-    
+
     // Calculate which line the cursor should be on (0-indexed from current line)
     const cursorLine = Math.floor(cursorAbsolutePosition / terminalWidth);
     const endLine = Math.floor(endAbsolutePosition / terminalWidth);
-    
+
     // Calculate column position on that line
     const cursorColumn = cursorAbsolutePosition % terminalWidth;
     const endColumn = endAbsolutePosition % terminalWidth;
-    
+
     // Move cursor to correct position
     if (endLine > cursorLine) {
       // Need to move up lines
@@ -292,8 +293,8 @@ inquirer.registerPrompt("spellcheck", SpellCheckPrompt as any);
 function handleEscapeKey(): void {
   const exitBox = boxen(
     chalk.yellow("Operation cancelled by user (ESC pressed)") +
-      "\n\n" +
-      chalk.dim("Run the command again when you're ready to commit."),
+    "\n\n" +
+    chalk.dim("Run the command again when you're ready to commit."),
     {
       padding: 0.5,
       margin: 1,
@@ -348,7 +349,7 @@ function formatCommitMessage(
   return message;
 }
 
-export async function promptCommit(hookFile?: string): Promise<void> {
+export async function promptCommit(hookFile?: string, aiMessage?: string): Promise<void> {
   setupEscapeHandler();
 
   // Initialize spell checker
@@ -370,13 +371,29 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         name: "type",
         type: "list",
         message: "Select the type of change you're committing:",
-        choices: getCommitTypes(),
-        pageSize: 10,
+        choices: [
+          ...getCommitTypes(),
+          new inquirer.Separator(),
+          { name: chalk.magenta("✨ Generate with AI"), value: "ai_generate" },
+        ],
+        pageSize: 11,
         theme: {
           helpMode: "never",
         },
       },
     ];
+
+    // If we have an AI message, we can skip the main prompts or use it as default
+    let defaultValues: any = {};
+    if (aiMessage) {
+      // AI messages are usually in format "TYPE(SCOPE): MESSAGE" or "TYPE: MESSAGE"
+      const match = aiMessage.match(/^([A-Z]+)(?:\(([^)]+)\))?:\s*(.+)$/);
+      if (match) {
+        defaultValues.type = match[1];
+        defaultValues.scope = match[2] || "";
+        defaultValues.message = match[3];
+      }
+    }
 
     // Conditionally add scope prompt
     if (promptsConfig.scope) {
@@ -384,6 +401,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         name: "scope",
         type: "input",
         message: "What is the scope of this change? (optional):",
+        default: defaultValues.scope,
         filter: (input: string) => input.trim(),
       });
     }
@@ -393,6 +411,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       name: "message",
       type: "spellcheck" as any,
       message: "Write a short, commit message:",
+      default: defaultValues.message,
       validate: (input: string) => {
         if (input.trim().length < 1) {
           return "Please enter a commit message.";
@@ -436,7 +455,22 @@ export async function promptCommit(hookFile?: string): Promise<void> {
     }
 
     // Prompt user with configured questions
-    const answers = await inquirer.prompt(questions);
+    let answers = await inquirer.prompt(questions, defaultValues);
+
+    // If user selected AI generation from the list
+    if (answers.type === "ai_generate") {
+      try {
+        const generated = await AiGenerator.generateCommitMessage();
+        console.log(chalk.dim("\nGenerated message: ") + chalk.cyan(generated) + "\n");
+
+        // Re-run prompt with the generated message
+        return promptCommit(hookFile, generated);
+      } catch (error) {
+        console.error(chalk.red("\nAI Generation failed:"), error instanceof Error ? error.message : String(error));
+        console.log(chalk.yellow("Falling back to manual commit...\n"));
+        return promptCommit(hookFile);
+      }
+    }
 
     // Find the selected commit type from config
     const selectedType = getCommitTypeConfig(answers.type);
