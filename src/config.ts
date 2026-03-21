@@ -23,7 +23,7 @@ export interface GitCleanConfig {
     issues?: boolean;
   };
   ai?: {
-    provider?: "gemini" | "openai" | "deepseek" | "custom";
+    provider?: "gemini" | "openai" | "deepseek" | "anthropic" | "ollama" | "groq" | "custom";
     model?: string;
     apiKey?: string;
     baseURL?: string;
@@ -139,7 +139,7 @@ function mergeConfigs(base: GitCleanConfig, override: GitCleanConfig): GitCleanC
       issues: override.prompts?.issues ?? base.prompts?.issues ?? false,
     },
     ai: {
-      provider: override.ai?.provider ?? base.ai?.provider ?? "gemini",
+      provider: (override.ai?.provider ?? base.ai?.provider ?? "gemini") as "gemini" | "openai" | "deepseek" | "anthropic" | "ollama" | "groq" | "custom",
       model: override.ai?.model ?? base.ai?.model,
       apiKey: override.ai?.apiKey ?? base.ai?.apiKey,
       baseURL: override.ai?.baseURL ?? base.ai?.baseURL,

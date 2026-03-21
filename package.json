@@ -43,6 +43,7 @@
   },
   "homepage": "https://github.com/thissudhir/gitCleanCommit#readme",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@google/generative-ai": "^0.24.1",
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",

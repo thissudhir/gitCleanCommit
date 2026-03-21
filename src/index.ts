@@ -7,7 +7,9 @@ import {
   setupGitHook,
   removeGitHook,
   getGitStatus,
+  executeFullGitWorkflow,
 } from "./git-integration.js";
+import inquirer from "inquirer";
 import { GitCleanSpellChecker } from "./spellcheck.js";
 import {
   initializeConfig,
@@ -302,23 +304,61 @@ program
   .action(async () => {
     showBanner();
     try {
-      const message = await AiGenerator.generateCommitMessage();
+      let message = await AiGenerator.generateCommitMessage();
 
-      // After generation, we should probably confirm and then commit
-      console.log(
-        boxen(chalk.green("AI Generated Message:\n\n") + chalk.white(message), {
-          padding: 0.5,
-          margin: 0.5,
-          borderColor: "green",
-          borderStyle: "round",
-          title: "AI Suggestion",
-          titleAlignment: "center",
-        })
-      );
+      while (true) {
+        console.log(
+          boxen(chalk.green("AI Generated Message:\n\n") + chalk.white(message), {
+            padding: 0.5,
+            margin: 0.5,
+            borderColor: "green",
+            borderStyle: "round",
+            title: "AI Suggestion",
+            titleAlignment: "center",
+          })
+        );
 
-      // We need a way to use this message in the workflow
-      // I'll update promptCommit to accept an initial message
-      await promptCommit(undefined, message);
+        const { action } = await inquirer.prompt([
+          {
+            name: "action",
+            type: "list",
+            message: "What would you like to do?",
+            choices: [
+              { name: `${chalk.green("✔")}  Commit with this message`, value: "commit" },
+              { name: `${chalk.blue("✎")}  Edit the message`,          value: "edit" },
+              { name: `${chalk.yellow("↺")}  Regenerate`,               value: "regenerate" },
+              { name: `${chalk.red("✖")}  Cancel`,                     value: "cancel" },
+            ],
+          },
+        ]);
+
+        if (action === "commit") {
+          await executeFullGitWorkflow(message);
+          break;
+        } else if (action === "edit") {
+          const { edited } = await inquirer.prompt([
+            {
+              name: "edited",
+              type: "input",
+              message: "Edit commit message:",
+              default: message,
+            },
+          ]);
+          message = edited.trim();
+        } else if (action === "regenerate") {
+          message = await AiGenerator.generateCommitMessage();
+        } else {
+          console.log(
+            boxen(chalk.yellow("Operation cancelled"), {
+              padding: 0.5,
+              margin: 0.5,
+              borderColor: "yellow",
+              borderStyle: "round",
+            })
+          );
+          process.exit(0);
+        }
+      }
     } catch (error) {
       console.error(chalk.red("Generation failed:"), getErrorMessage(error));
       process.exit(1);
