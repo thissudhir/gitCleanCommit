@@ -218,3 +218,27 @@ export function getConfigAsString(): string {
   const config = loadConfig();
   return JSON.stringify(config, null, 2);
 }
+
+/**
+ * Update only the AI section of the config file.
+ * Creates the config file if it doesn't exist yet.
+ */
+export function updateAiConfig(
+  aiSettings: GitCleanConfig["ai"],
+  global: boolean = false
+): string {
+  const configPath = global ? getGlobalConfigPath() : getProjectConfigPath();
+
+  let existing: GitCleanConfig = {};
+  if (existsSync(configPath)) {
+    try {
+      existing = JSON.parse(readFileSync(configPath, "utf-8"));
+    } catch {
+      existing = {};
+    }
+  }
+
+  existing.ai = { ...existing.ai, ...aiSettings };
+  writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+  return configPath;
+}

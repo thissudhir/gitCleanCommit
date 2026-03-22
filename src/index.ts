@@ -15,6 +15,7 @@ import {
   initializeConfig,
   getConfigAsString,
   getDefaultCommitTypes,
+  updateAiConfig,
 } from "./config.js";
 import { AiGenerator } from "./ai-generator.js";
 import chalk from "chalk";
@@ -189,6 +190,170 @@ configCommand
         chalk.red("Failed to read config:"),
         getErrorMessage(error)
       );
+      process.exit(1);
+    }
+  });
+
+const PROVIDER_DEFAULTS: Record<string, { model: string; envVar: string; keyLink: string }> = {
+  gemini:    { model: "gemini-1.5-flash",         envVar: "GEMINI_API_KEY",    keyLink: "https://aistudio.google.com/app/apikey" },
+  openai:    { model: "gpt-4o-mini",              envVar: "OPENAI_API_KEY",    keyLink: "https://platform.openai.com/api-keys" },
+  anthropic: { model: "claude-3-5-haiku-20241022",envVar: "ANTHROPIC_API_KEY", keyLink: "https://console.anthropic.com/settings/keys" },
+  groq:      { model: "llama-3.1-8b-instant",     envVar: "GROQ_API_KEY",      keyLink: "https://console.groq.com/keys" },
+  deepseek:  { model: "deepseek-chat",            envVar: "DEEPSEEK_API_KEY",  keyLink: "https://platform.deepseek.com/api_keys" },
+  ollama:    { model: "llama3.2",                 envVar: "",                  keyLink: "" },
+  custom:    { model: "",                         envVar: "AI_API_KEY",        keyLink: "" },
+};
+
+configCommand
+  .command("ai")
+  .description("Interactively configure AI provider, model, and API key")
+  .option("-g, --global", "Save to global config (~/.gitclean.config.json) instead of project config")
+  .action(async (options) => {
+    console.log(
+      boxen(
+        chalk.cyan("AI Configuration Setup\n\n") +
+        chalk.dim("This will update the ") +
+        chalk.bold(options.global ? "~/.gitclean.config.json" : ".gitclean.config.json") +
+        chalk.dim(" file.\n") +
+        chalk.dim("API keys can also be set as environment variables instead."),
+        {
+          padding: 0.5,
+          margin: 0.5,
+          borderColor: "cyan",
+          borderStyle: "round",
+          title: "GitClean AI Setup",
+          titleAlignment: "center",
+        }
+      )
+    );
+
+    try {
+      // Step 1 — choose provider
+      const { provider } = await inquirer.prompt([
+        {
+          name: "provider",
+          type: "list",
+          message: "Which AI provider would you like to use?",
+          choices: [
+            { name: `${chalk.yellow("◆")}  Gemini       ${chalk.dim("(Google — gemini-1.5-flash)")}`,        value: "gemini" },
+            { name: `${chalk.green("◆")}  OpenAI       ${chalk.dim("(gpt-4o-mini)")}`,                       value: "openai" },
+            { name: `${chalk.magenta("◆")}  Anthropic    ${chalk.dim("(claude-3-5-haiku)")}`,                value: "anthropic" },
+            { name: `${chalk.cyan("◆")}  Groq         ${chalk.dim("(fast + free tier — llama)")}`,           value: "groq" },
+            { name: `${chalk.blue("◆")}  DeepSeek     ${chalk.dim("(deepseek-chat)")}`,                      value: "deepseek" },
+            { name: `${chalk.white("◆")}  Ollama       ${chalk.dim("(local — no API key needed)")}`,         value: "ollama" },
+            { name: `${chalk.dim("◆")}  Custom       ${chalk.dim("(any OpenAI-compatible endpoint)")}`,      value: "custom" },
+          ],
+        },
+      ]);
+
+      const defaults = PROVIDER_DEFAULTS[provider];
+
+      // Step 2 — choose model
+      const { model } = await inquirer.prompt([
+        {
+          name: "model",
+          type: "input",
+          message: "Model name:",
+          default: defaults.model || undefined,
+        },
+      ]);
+
+      // Step 3 — baseURL for custom/ollama
+      let baseURL: string | undefined;
+      if (provider === "custom") {
+        const { url } = await inquirer.prompt([
+          {
+            name: "url",
+            type: "input",
+            message: "Base URL for your API endpoint:",
+            default: "http://localhost:1234/v1",
+          },
+        ]);
+        baseURL = url.trim() || undefined;
+      }
+
+      // Step 4 — API key (skip for Ollama)
+      let apiKey: string | undefined;
+      let keyStoredAs = "";
+
+      if (provider !== "ollama") {
+        const { keyMethod } = await inquirer.prompt([
+          {
+            name: "keyMethod",
+            type: "list",
+            message: "How would you like to provide your API key?",
+            choices: [
+              {
+                name: `${chalk.green("●")}  Save in config file  ${chalk.dim("(easy, but don't commit the file)")}`,
+                value: "config",
+              },
+              {
+                name: `${chalk.blue("●")}  I'll set it as an environment variable  ${chalk.dim(`(${defaults.envVar})`)}`,
+                value: "env",
+              },
+            ],
+          },
+        ]);
+
+        if (keyMethod === "config") {
+          const { key } = await inquirer.prompt([
+            {
+              name: "key",
+              type: "password",
+              message: `Enter your ${provider} API key:`,
+              mask: "*",
+              validate: (v: string) => v.trim().length > 0 || "API key cannot be empty",
+            },
+          ]);
+          apiKey = key.trim();
+          keyStoredAs = "config";
+        } else {
+          keyStoredAs = "env";
+        }
+      }
+
+      // Save to config
+      const savedPath = updateAiConfig(
+        { provider: provider as any, model: model.trim() || undefined, apiKey, baseURL },
+        options.global || false
+      );
+
+      // Show result
+      const lines: string[] = [
+        chalk.green("AI configuration saved!\n"),
+        chalk.dim(`File: ${savedPath}\n`),
+        `  Provider : ${chalk.cyan(provider)}`,
+        `  Model    : ${chalk.cyan(model || defaults.model)}`,
+      ];
+
+      if (baseURL) lines.push(`  Base URL : ${chalk.cyan(baseURL)}`);
+
+      if (provider === "ollama") {
+        lines.push(`\n${chalk.yellow("Make sure Ollama is running:")} ${chalk.bold("ollama serve")}`);
+      } else if (keyStoredAs === "env") {
+        lines.push(`\n${chalk.yellow("Set your API key as an environment variable:")}`);
+        lines.push(chalk.bold(`  export ${defaults.envVar}=your_key_here`));
+        if (defaults.keyLink) lines.push(chalk.dim(`  Get a key: ${defaults.keyLink}`));
+      } else if (keyStoredAs === "config") {
+        lines.push(`\n${chalk.red("⚠  Security reminder:")}`);
+        lines.push(chalk.dim("  Add .gitclean.config.json to .gitignore if it contains your API key,"));
+        lines.push(chalk.dim("  or use a global config (gitclean config ai --global) to keep it out of the repo."));
+      }
+
+      lines.push(`\n${chalk.dim("Test it with:")} ${chalk.bold("gitclean ai")}`);
+
+      console.log(
+        boxen(lines.join("\n"), {
+          padding: 0.5,
+          margin: 0.5,
+          borderColor: "green",
+          borderStyle: "round",
+          title: "AI Setup Complete",
+          titleAlignment: "center",
+        })
+      );
+    } catch (error) {
+      console.error(chalk.red("AI config setup failed:"), getErrorMessage(error));
       process.exit(1);
     }
   });

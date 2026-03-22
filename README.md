@@ -1,6 +1,8 @@
+# GitClean
+
 ![Image](https://github.com/user-attachments/assets/85c1dbf3-2d32-475c-bb1b-db30971d50c8)
 
-> A beautiful CLI tool for creating clean, conventional git commits with real-time spell checking and seamless git workflow automation
+> A beautiful CLI tool for creating clean, conventional git commits with real-time spell checking, AI-powered message generation, and seamless git workflow automation
 
 [![npm version](https://badge.fury.io/js/gitcleancommit.svg)](https://badge.fury.io/js/gitcleancommit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -45,6 +47,7 @@ That's it! GitClean will guide you through creating a clean, conventional commit
 ## Features
 
 - **Streamlined Workflow**: Default 3-step commit process (type, scope, message)
+- **AI-Powered Generation**: Generate commit messages with Gemini, Claude, GPT, Groq, Ollama, or any OpenAI-compatible model
 - **Complete Git Workflow**: Single command to stage, commit, and push changes
 - **Configurable Prompts**: Enable/disable fields via config (body, breaking changes, issues)
 - **Real-time Spell Checking**: Live spell checking as you type with visual feedback
@@ -187,22 +190,209 @@ gitclean config init
 ```
 
 **Options:**
+
 - `-g, --global`: Create config in home directory (`~/.gitclean.config.json`)
 - Without flag: Create config in current directory (`.gitclean.config.json`)
 
 ### `gitclean ai`
 
-Automatically generate a conventional commit message based on your staged changes:
+Let AI read your diff and generate a conventional commit message. Supports every major provider — cloud or local.
 
 ```bash
 gitclean ai
 ```
 
-1. Shows the GitClean banner
-2. Checks for uncommitted changes
-3. Displays a loading spinner while generating the message
-4. Presents the AI-suggested message for confirmation/editing
-5. Continues with the standard commit workflow
+**Workflow:**
+
+1. AI reads your staged changes and generates a commit message
+2. The message is shown in a box
+3. You choose what to do next
+
+```text
+? What would you like to do?
+❯ ✔  Commit with this message
+  ✎  Edit the message
+  ↺  Regenerate
+  ✖  Cancel
+```
+
+- **Commit** — stages all changes, commits, and pushes
+- **Edit** — tweak the message inline, then commit
+- **Regenerate** — ask the AI for a new message
+- **Cancel** — exit without committing
+
+---
+
+## AI Setup
+
+### Supported Providers
+
+| Provider | Models | Needs API Key |
+|----------|--------|---------------|
+| **Gemini** | `gemini-1.5-flash`, `gemini-1.5-pro`, `gemini-2.0-flash` | Yes — [aistudio.google.com](https://aistudio.google.com) |
+| **OpenAI** | `gpt-4o-mini`, `gpt-4o`, `o1-mini` | Yes — [platform.openai.com](https://platform.openai.com) |
+| **Anthropic** | `claude-3-5-haiku-20241022`, `claude-3-5-sonnet-20241022`, `claude-opus-4-5` | Yes — [console.anthropic.com](https://console.anthropic.com) |
+| **Groq** | `llama-3.1-8b-instant`, `llama-3.3-70b-versatile`, `mixtral-8x7b-32768` | Yes (free tier) — [console.groq.com](https://console.groq.com) |
+| **Ollama** | `llama3.2`, `codellama`, `mistral`, `qwen2.5-coder`, any local model | No |
+| **DeepSeek** | `deepseek-chat`, `deepseek-reasoner` | Yes — [platform.deepseek.com](https://platform.deepseek.com) |
+| **Custom** | Any model | Depends on provider |
+
+> **Open-source / local models**: Ollama, LM Studio, Jan, vLLM, and any other server that exposes an OpenAI-compatible `/v1` endpoint all work via `provider: "custom"` or `provider: "ollama"`.
+
+---
+
+### Option 1 — Interactive setup (recommended)
+
+Run the guided setup — it asks you to pick a provider, model, and where to store your key:
+
+```bash
+# Save to project config (.gitclean.config.json)
+gitclean config ai
+
+# Save to global config (~/.gitclean.config.json — shared across all projects)
+gitclean config ai --global
+```
+
+You'll be prompted to:
+
+1. Pick a provider (Gemini, OpenAI, Anthropic, Groq, Ollama, DeepSeek, Custom)
+2. Enter or confirm the model name
+3. Choose how to store your API key — in the config file or as an env var
+
+> If you choose to save the API key in the config file, add `.gitclean.config.json` to your `.gitignore` — or use `--global` to keep it in your home directory and out of the repo entirely.
+
+---
+
+### Option 2 — Manual config file
+
+Run `gitclean config init` and add an `ai` block:
+
+#### Gemini (default)
+
+```json
+{
+  "ai": {
+    "provider": "gemini",
+    "model": "gemini-1.5-flash",
+    "apiKey": "your_key_here"
+  }
+}
+```
+
+#### OpenAI / GPT
+
+```json
+{
+  "ai": {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "apiKey": "your_key_here"
+  }
+}
+```
+
+#### Anthropic / Claude
+
+```json
+{
+  "ai": {
+    "provider": "anthropic",
+    "model": "claude-3-5-haiku-20241022",
+    "apiKey": "your_key_here"
+  }
+}
+```
+
+#### Groq (fast + free tier)
+
+```json
+{
+  "ai": {
+    "provider": "groq",
+    "model": "llama-3.1-8b-instant",
+    "apiKey": "your_key_here"
+  }
+}
+```
+
+#### Ollama (local, no API key needed)
+
+Make sure Ollama is running first: `ollama serve`
+
+```json
+{
+  "ai": {
+    "provider": "ollama",
+    "model": "llama3.2"
+  }
+}
+```
+
+#### DeepSeek
+
+```json
+{
+  "ai": {
+    "provider": "deepseek",
+    "model": "deepseek-chat",
+    "apiKey": "your_key_here"
+  }
+}
+```
+
+#### Custom / Self-hosted (LM Studio, vLLM, Jan, Together AI, etc.)
+
+```json
+{
+  "ai": {
+    "provider": "custom",
+    "baseURL": "http://localhost:1234/v1",
+    "model": "your-model-name",
+    "apiKey": "not-needed"
+  }
+}
+```
+
+---
+
+### Option 2 — Environment variables (one-off / CI)
+
+```bash
+# Set provider + key inline
+GROQ_API_KEY=your_key GITCLEAN_AI_PROVIDER=groq gitclean ai
+
+# Override model too
+GROQ_API_KEY=your_key GITCLEAN_AI_PROVIDER=groq GITCLEAN_AI_MODEL=llama-3.3-70b-versatile gitclean ai
+```
+
+Supported env vars:
+
+| Variable | Used for |
+|----------|----------|
+| `GEMINI_API_KEY` | Gemini |
+| `OPENAI_API_KEY` | OpenAI |
+| `ANTHROPIC_API_KEY` | Anthropic / Claude |
+| `GROQ_API_KEY` | Groq |
+| `DEEPSEEK_API_KEY` | DeepSeek |
+| `AI_API_KEY` | Any custom provider |
+| `GITCLEAN_AI_PROVIDER` | Override the configured provider |
+| `GITCLEAN_AI_MODEL` | Override the configured model |
+
+---
+
+### `gitclean config ai`
+
+Interactively configure your AI provider, model, and API key:
+
+```bash
+# Project config (current directory)
+gitclean config ai
+
+# Global config (applies to all projects)
+gitclean config ai --global
+```
+
+Walks you through selecting a provider, model, and where to store your API key. At the end it shows the env var name to set if you prefer not to store the key in the file.
 
 ### `gitclean config show`
 
@@ -287,7 +477,7 @@ GitClean supports six default conventional commit types:
 
 GitClean features an advanced spell checker specifically optimized for development:
 
-### Features
+### Spell Check Features
 
 - **Live Feedback**: See misspellings highlighted in red as you type
 - **Smart Dictionary**: Recognizes 200+ technical terms and programming keywords
@@ -374,10 +564,10 @@ The configuration file supports:
   - `issues`: Show issue references prompt (default: `false`)
 
 - **ai**: AI-powered commit message settings
-  - `provider`: AI provider (`"gemini"`, `"openai"`, `"deepseek"`, or `"custom"`)
-  - `model`: Model name (e.g., `"gemini-1.5-flash"`, `"gpt-4o"`, `"deepseek-chat"`)
-  - `apiKey`: Your API Key (can also be set via environment variables like `GEMINI_API_KEY`)
-  - `baseURL`: Custom API endpoint (useful for DeepSeek or local LLMs)
+  - `provider`: AI provider — `"gemini"`, `"openai"`, `"anthropic"`, `"groq"`, `"ollama"`, `"deepseek"`, or `"custom"`
+  - `model`: Model name (e.g., `"gemini-1.5-flash"`, `"gpt-4o-mini"`, `"claude-3-5-haiku-20241022"`, `"llama-3.1-8b-instant"`)
+  - `apiKey`: Your API key — can also be set via `.env` file or environment variables
+  - `baseURL`: Custom endpoint URL — required for `"custom"` provider (LM Studio, vLLM, Jan, etc.)
 
 ---
 
@@ -424,6 +614,31 @@ npm install -g gitcleancommit
 # Or use npx
 npx gitcleancommit
 ```
+
+### "Missing API key for groq" (or any provider)
+
+API keys are resolved in this order:
+
+1. `GITCLEAN_AI_PROVIDER` / `GITCLEAN_AI_MODEL` env vars
+2. `apiKey` field in `.gitclean.config.json`
+
+Make sure your key is set in at least one of those places.
+
+### "The model `gemini-1.5-flash` does not exist" on Groq/OpenAI
+
+This happens when you switch provider via `GITCLEAN_AI_PROVIDER` but your config file still has a model set for a different provider. The mismatched model name gets sent to the new provider, which doesn't recognise it.
+
+Fix: also set `GITCLEAN_AI_MODEL` to a model supported by the new provider:
+
+```bash
+GROQ_API_KEY=your_key GITCLEAN_AI_PROVIDER=groq GITCLEAN_AI_MODEL=llama-3.1-8b-instant gitclean ai
+```
+
+Or update the `model` field in your `.gitclean.config.json` to match.
+
+### AI generates a badly formatted message
+
+Use the **Edit** option in the action menu to fix the message inline, or **Regenerate** to ask the AI for another attempt.
 
 ---
 
