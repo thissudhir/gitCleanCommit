@@ -104,6 +104,14 @@ function getProjectConfigPath(): string {
 /**
  * Load and parse a config file from the given path
  */
+/** Strip single-line // comments so config files can contain helpful hints. */
+function stripComments(raw: string): string {
+  return raw
+    .split("\n")
+    .map((line) => line.replace(/\s*\/\/.*$/, ""))
+    .join("\n");
+}
+
 function loadConfigFromPath(configPath: string): GitCleanConfig | null {
   if (!existsSync(configPath)) {
     return null;
@@ -111,7 +119,7 @@ function loadConfigFromPath(configPath: string): GitCleanConfig | null {
 
   try {
     const configContent = readFileSync(configPath, "utf-8");
-    return JSON.parse(configContent);
+    return JSON.parse(stripComments(configContent));
   } catch (error) {
     console.warn(
       chalk.yellow(
@@ -122,10 +130,11 @@ function loadConfigFromPath(configPath: string): GitCleanConfig | null {
   }
 }
 
-/**
- * Merge two configs, with the override config taking precedence
- */
+
 function mergeConfigs(base: GitCleanConfig, override: GitCleanConfig): GitCleanConfig {
+  const finalProvider = override.ai?.provider ?? base.ai?.provider ?? "gemini";
+  const sameProvider = !override.ai?.provider || override.ai.provider === base.ai?.provider;
+
   return {
     commitTypes: override.commitTypes ?? base.commitTypes,
     spellCheck: {
@@ -139,20 +148,14 @@ function mergeConfigs(base: GitCleanConfig, override: GitCleanConfig): GitCleanC
       issues: override.prompts?.issues ?? base.prompts?.issues ?? false,
     },
     ai: {
-      provider: (override.ai?.provider ?? base.ai?.provider ?? "gemini") as "gemini" | "openai" | "deepseek" | "anthropic" | "ollama" | "groq" | "custom",
-      model: override.ai?.model ?? base.ai?.model,
-      apiKey: override.ai?.apiKey ?? base.ai?.apiKey,
-      baseURL: override.ai?.baseURL ?? base.ai?.baseURL,
+      provider: finalProvider as "gemini" | "openai" | "deepseek" | "anthropic" | "ollama" | "groq" | "custom",
+      model:    override.ai?.model   ?? (sameProvider ? base.ai?.model   : undefined),
+      apiKey:   override.ai?.apiKey  ?? (sameProvider ? base.ai?.apiKey  : undefined),
+      baseURL:  override.ai?.baseURL ?? (sameProvider ? base.ai?.baseURL : undefined),
     },
   };
 }
 
-/**
- * Load configuration with the following precedence:
- * 1. Project-specific config (.gitclean.config.json in current directory)
- * 2. Global config (~/.gitclean.config.json)
- * 3. Default config
- */
 export function loadConfig(): GitCleanConfig {
   const globalConfigPath = getGlobalConfigPath();
   const projectConfigPath = getProjectConfigPath();
@@ -199,6 +202,65 @@ export function getCommitTypeConfig(value: string): CommitTypeConfig {
   );
 }
 
+const AVAILABLE_COLORS =
+  "black | red | green | yellow | blue | magenta | cyan | white | gray | redBright | greenBright | yellowBright | blueBright | magentaBright | cyanBright | whiteBright";
+
+const DEFAULT_CONFIG_TEMPLATE = `{
+  "commitTypes": [
+    {
+      "name": "ADD",
+      "value": "ADD",
+      "color": "green",         // ${AVAILABLE_COLORS}
+      "description": "Add new code or files"
+    },
+    {
+      "name": "FIX",
+      "value": "FIX",
+      "color": "red",           // ${AVAILABLE_COLORS}
+      "description": "A bug fix"
+    },
+    {
+      "name": "UPDATE",
+      "value": "UPDATE",
+      "color": "yellow",        // ${AVAILABLE_COLORS}
+      "description": "Update a file or code"
+    },
+    {
+      "name": "DOCS",
+      "value": "DOCS",
+      "color": "blue",          // ${AVAILABLE_COLORS}
+      "description": "Documentation changes"
+    },
+    {
+      "name": "TEST",
+      "value": "TEST",
+      "color": "cyan",          // ${AVAILABLE_COLORS}
+      "description": "Adding tests"
+    },
+    {
+      "name": "REMOVE",
+      "value": "REMOVE",
+      "color": "redBright",     // ${AVAILABLE_COLORS}
+      "description": "Remove code or files"
+    }
+  ],
+  "spellCheck": {
+    "enabled": true,
+    "debounceMs": 150
+  },
+  "prompts": {
+    "scope": true,
+    "body": false,
+    "breaking": false,
+    "issues": false
+  },
+  "ai": {
+    "provider": "gemini",       // gemini | openai | anthropic | groq | deepseek | ollama | custom
+    "model": "gemini-1.5-flash" // model name for the selected provider
+  }
+}
+`;
+
 export function initializeConfig(global: boolean = false): void {
   const configPath = global ? getGlobalConfigPath() : getProjectConfigPath();
 
@@ -206,8 +268,7 @@ export function initializeConfig(global: boolean = false): void {
     throw new Error("Config file already exists at " + configPath);
   }
 
-  const configContent = JSON.stringify(DEFAULT_CONFIG, null, 2);
-  writeFileSync(configPath, configContent, "utf-8");
+  writeFileSync(configPath, DEFAULT_CONFIG_TEMPLATE, "utf-8");
 }
 
 export function getDefaultCommitTypes(): CommitTypeConfig[] {
@@ -219,10 +280,6 @@ export function getConfigAsString(): string {
   return JSON.stringify(config, null, 2);
 }
 
-/**
- * Update only the AI section of the config file.
- * Creates the config file if it doesn't exist yet.
- */
 export function updateAiConfig(
   aiSettings: GitCleanConfig["ai"],
   global: boolean = false
@@ -238,7 +295,14 @@ export function updateAiConfig(
     }
   }
 
-  existing.ai = { ...existing.ai, ...aiSettings };
+  const providerChanging = aiSettings?.provider && aiSettings.provider !== existing.ai?.provider;
+  if (providerChanging) {
+    existing.ai = Object.fromEntries(
+      Object.entries(aiSettings ?? {}).filter(([, v]) => v !== undefined)
+    ) as GitCleanConfig["ai"];
+  } else {
+    existing.ai = { ...existing.ai, ...aiSettings };
+  }
   writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
   return configPath;
 }

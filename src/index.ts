@@ -21,6 +21,9 @@ import { AiGenerator } from "./ai-generator.js";
 import chalk from "chalk";
 import boxen from "boxen";
 import ora from "ora";
+import { createRequire } from "module";
+
+const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
 
 // Helper function to safely get error message
 function getErrorMessage(error: unknown): string {
@@ -33,7 +36,7 @@ const program = new Command();
 program
   .name("gitclean")
   .description("Clean, conventional commits made easy")
-  .version("1.2.0", "-v, --version", "Show version information");
+  .version(version, "-v, --version", "Show version information");
 
 program
   .command("setup")

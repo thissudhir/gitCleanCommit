@@ -104,6 +104,8 @@ gitclean config init
 
 **Config Hierarchy**: Project → Global → Defaults
 
+> When the project config uses a different AI provider than the global config, provider-specific fields (`apiKey`, `model`, `baseURL`) from the global config are **not** inherited — they belong to a different provider and would cause errors.
+
 ### Enable Additional Prompts
 
 Want more fields? Create a config file:
@@ -355,7 +357,7 @@ Make sure Ollama is running first: `ollama serve`
 
 ---
 
-### Option 2 — Environment variables (one-off / CI)
+### Option 3 — Environment variables (one-off / CI)
 
 ```bash
 # Set provider + key inline
@@ -565,9 +567,11 @@ The configuration file supports:
 
 - **ai**: AI-powered commit message settings
   - `provider`: AI provider — `"gemini"`, `"openai"`, `"anthropic"`, `"groq"`, `"ollama"`, `"deepseek"`, or `"custom"`
-  - `model`: Model name (e.g., `"gemini-1.5-flash"`, `"gpt-4o-mini"`, `"claude-3-5-haiku-20241022"`, `"llama-3.1-8b-instant"`)
-  - `apiKey`: Your API key — can also be set via `.env` file or environment variables
+  - `model`: Model name for the selected provider (e.g., `"gemini-1.5-flash"`, `"gpt-4o-mini"`, `"llama-3.1-8b-instant"`)
+  - `apiKey`: Your API key — omit this field and use a provider-specific env var instead if you don't want the key in the file
   - `baseURL`: Custom endpoint URL — required for `"custom"` provider (LM Studio, vLLM, Jan, etc.)
+
+  > `model`, `apiKey`, and `baseURL` are provider-specific. When you switch `provider`, these fields do not carry over from a previous provider's config — either in the same file or a global config.
 
 ---
 
@@ -619,22 +623,17 @@ npx gitcleancommit
 
 API keys are resolved in this order:
 
-1. `GITCLEAN_AI_PROVIDER` / `GITCLEAN_AI_MODEL` env vars
-2. `apiKey` field in `.gitclean.config.json`
+1. `apiKey` field in your config file (`.gitclean.config.json` or `~/.gitclean.config.json`)
+2. Provider-specific environment variable (`GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, etc.)
 
-Make sure your key is set in at least one of those places.
+If you switched providers via `gitclean config ai`, the old provider's key is automatically cleared from the config — make sure the new provider's env var is set if you chose "env var" during setup.
 
-### "The model `gemini-1.5-flash` does not exist" on Groq/OpenAI
-
-This happens when you switch provider via `GITCLEAN_AI_PROVIDER` but your config file still has a model set for a different provider. The mismatched model name gets sent to the new provider, which doesn't recognise it.
-
-Fix: also set `GITCLEAN_AI_MODEL` to a model supported by the new provider:
+Quick fix for any provider:
 
 ```bash
-GROQ_API_KEY=your_key GITCLEAN_AI_PROVIDER=groq GITCLEAN_AI_MODEL=llama-3.1-8b-instant gitclean ai
+# Reconfigure interactively — picks the right env var name for you
+gitclean config ai
 ```
-
-Or update the `model` field in your `.gitclean.config.json` to match.
 
 ### AI generates a badly formatted message
 
