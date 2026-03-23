@@ -202,45 +202,52 @@ export function getCommitTypeConfig(value: string): CommitTypeConfig {
   );
 }
 
-const AVAILABLE_COLORS =
-  "black | red | green | yellow | blue | magenta | cyan | white | gray | redBright | greenBright | yellowBright | blueBright | magentaBright | cyanBright | whiteBright";
-
-const DEFAULT_CONFIG_TEMPLATE = `{
+const DEFAULT_CONFIG_TEMPLATE = `
+// GitClean Configuration
+// ─────────────────────────────────────────────────────────────────────────────
+// Available colors for commitTypes:
+//   black | red | green | yellow | blue | magenta | cyan | white | gray
+//   redBright | greenBright | yellowBright | blueBright | magentaBright | cyanBright | whiteBright
+//
+// Available AI providers:
+//   gemini | openai | anthropic | groq | deepseek | ollama | custom
+// ─────────────────────────────────────────────────────────────────────────────
+{
   "commitTypes": [
     {
       "name": "ADD",
       "value": "ADD",
-      "color": "green",         // ${AVAILABLE_COLORS}
+      "color": "green",
       "description": "Add new code or files"
     },
     {
       "name": "FIX",
       "value": "FIX",
-      "color": "red",           // ${AVAILABLE_COLORS}
+      "color": "red",
       "description": "A bug fix"
     },
     {
       "name": "UPDATE",
       "value": "UPDATE",
-      "color": "yellow",        // ${AVAILABLE_COLORS}
+      "color": "yellow",
       "description": "Update a file or code"
     },
     {
       "name": "DOCS",
       "value": "DOCS",
-      "color": "blue",          // ${AVAILABLE_COLORS}
+      "color": "blue",
       "description": "Documentation changes"
     },
     {
       "name": "TEST",
       "value": "TEST",
-      "color": "cyan",          // ${AVAILABLE_COLORS}
+      "color": "cyan",
       "description": "Adding tests"
     },
     {
       "name": "REMOVE",
       "value": "REMOVE",
-      "color": "redBright",     // ${AVAILABLE_COLORS}
+      "color": "redBright",
       "description": "Remove code or files"
     }
   ],
@@ -255,8 +262,9 @@ const DEFAULT_CONFIG_TEMPLATE = `{
     "issues": false
   },
   "ai": {
-    "provider": "gemini",       // gemini | openai | anthropic | groq | deepseek | ollama | custom
-    "model": "gemini-1.5-flash" // model name for the selected provider
+    "provider": "gemini",
+    "model": "gemini-1.5-flash",
+    "apiKey": ""                // paste your key here, or set the env var (e.g. GEMINI_API_KEY)
   }
 }
 `;
