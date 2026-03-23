@@ -22,6 +22,7 @@ import chalk from "chalk";
 import boxen from "boxen";
 import ora from "ora";
 import { createRequire } from "module";
+import * as readline from "readline";
 
 const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
 
@@ -504,15 +505,23 @@ program
           await executeFullGitWorkflow(message);
           break;
         } else if (action === "edit") {
-          const { edited } = await inquirer.prompt([
-            {
-              name: "edited",
-              type: "input",
-              message: "Edit commit message:",
-              default: message,
-            },
-          ]);
-          message = edited.trim();
+          // Inquirer v12 shows `default` as a greyed-out hint, not pre-filled
+          // text — typing immediately clears the field. Use readline directly
+          // so we can write the current message into the input buffer, giving
+          // the user a real edit-in-place experience.
+          message = await new Promise<string>((resolve) => {
+            const rl = readline.createInterface({
+              input: process.stdin,
+              output: process.stdout,
+              terminal: true,
+            });
+            process.stdout.write(chalk.green("?") + " " + chalk.bold("Edit commit message: "));
+            rl.question("", (answer) => {
+              rl.close();
+              resolve(answer.trim() || message);
+            });
+            rl.write(message); // pre-fill the input buffer with the current message
+          });
         } else if (action === "regenerate") {
           message = await AiGenerator.generateCommitMessage();
         } else {
