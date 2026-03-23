@@ -1,5 +1,6 @@
 import inquirer from "inquirer";
 import chalk from "chalk";
+import * as readline from "readline";
 import { GitCleanSpellChecker, SpellCheckResult } from "./spellcheck.js";
 import { executeFullGitWorkflow } from "./git-integration.js";
 import { writeFileSync } from "fs";
@@ -20,8 +21,9 @@ class SpellCheckPrompt {
     this.question = question;
     this.rl = readLine;
     this.answers = answers;
-    this.currentText = "";
-    this.cursorPosition = 0;
+    // Pre-fill with the default value (e.g. from AI-generated message)
+    this.currentText = question.default ?? "";
+    this.cursorPosition = this.currentText.length;
     this.spellErrors = [];
     this.status = "pending";
     this.keypressListener = null;
@@ -349,7 +351,78 @@ function formatCommitMessage(
   return message;
 }
 
-export async function promptCommit(hookFile?: string, aiMessage?: string): Promise<void> {
+export async function runAiCommitFlow(hookFile?: string): Promise<void> {
+  try {
+    let message = await AiGenerator.generateCommitMessage();
+
+    while (true) {
+      console.log(
+        boxen(chalk.green("AI Generated Message:\n\n") + chalk.white(message), {
+          padding: 0.5,
+          margin: 0.5,
+          borderColor: "green",
+          borderStyle: "round",
+          title: "AI Suggestion",
+          titleAlignment: "center",
+        })
+      );
+
+      const { action } = await inquirer.prompt([
+        {
+          name: "action",
+          type: "list",
+          message: "What would you like to do?",
+          choices: [
+            { name: `${chalk.green("✔")}  Commit with this message`, value: "commit" },
+            { name: `${chalk.blue("✎")}  Edit the message`,          value: "edit" },
+            { name: `${chalk.yellow("↺")}  Regenerate`,               value: "regenerate" },
+            { name: `${chalk.red("✖")}  Cancel`,                     value: "cancel" },
+          ],
+        },
+      ]);
+
+      if (action === "commit") {
+        if (hookFile) {
+          writeFileSync(hookFile, message);
+        } else {
+          await executeFullGitWorkflow(message);
+        }
+        break;
+      } else if (action === "edit") {
+        message = await new Promise<string>((resolve) => {
+          const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+            terminal: true,
+          });
+          process.stdout.write(chalk.green("?") + " " + chalk.bold("Edit commit message: "));
+          rl.question("", (answer) => {
+            rl.close();
+            resolve(answer.trim() || message);
+          });
+          rl.write(message);
+        });
+      } else if (action === "regenerate") {
+        message = await AiGenerator.generateCommitMessage();
+      } else {
+        console.log(
+          boxen(chalk.yellow("Operation cancelled"), {
+            padding: 0.5,
+            margin: 0.5,
+            borderColor: "yellow",
+            borderStyle: "round",
+          })
+        );
+        process.exit(0);
+      }
+    }
+  } catch (error) {
+    console.error(chalk.red("Generation failed:"), error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+}
+
+export async function promptCommit(hookFile?: string): Promise<void> {
   setupEscapeHandler();
 
   // Initialize spell checker
@@ -383,25 +456,13 @@ export async function promptCommit(hookFile?: string, aiMessage?: string): Promi
       },
     ];
 
-    // If we have an AI message, we can skip the main prompts or use it as default
-    let defaultValues: any = {};
-    if (aiMessage) {
-      // AI messages are usually in format "TYPE(SCOPE): MESSAGE" or "TYPE: MESSAGE"
-      const match = aiMessage.match(/^([A-Z]+)(?:\(([^)]+)\))?:\s*(.+)$/);
-      if (match) {
-        defaultValues.type = match[1];
-        defaultValues.scope = match[2] || "";
-        defaultValues.message = match[3];
-      }
-    }
-
     // Conditionally add scope prompt
     if (promptsConfig.scope) {
       questions.push({
         name: "scope",
         type: "input",
         message: "What is the scope of this change? (optional):",
-        default: defaultValues.scope,
+        when: (a: any) => a.type !== "ai_generate",
         filter: (input: string) => input.trim(),
       });
     }
@@ -411,7 +472,7 @@ export async function promptCommit(hookFile?: string, aiMessage?: string): Promi
       name: "message",
       type: "spellcheck" as any,
       message: "Write a short, commit message:",
-      default: defaultValues.message,
+      when: (a: any) => a.type !== "ai_generate",
       validate: (input: string) => {
         if (input.trim().length < 1) {
           return "Please enter a commit message.";
@@ -430,6 +491,7 @@ export async function promptCommit(hookFile?: string, aiMessage?: string): Promi
         name: "body",
         type: "spellcheck" as any,
         message: "Provide a longer description (optional):",
+        when: (a: any) => a.type !== "ai_generate",
         filter: (input: string) => input.trim(),
       });
     }
@@ -440,6 +502,7 @@ export async function promptCommit(hookFile?: string, aiMessage?: string): Promi
         name: "breaking",
         type: "confirm",
         message: "Are there any breaking changes?",
+        when: (a: any) => a.type !== "ai_generate",
         default: false,
       });
     }
@@ -450,26 +513,17 @@ export async function promptCommit(hookFile?: string, aiMessage?: string): Promi
         name: "issues",
         type: "input",
         message: 'Add issue references (e.g., "fixes #123", "closes #456"):',
+        when: (a: any) => a.type !== "ai_generate",
         filter: (input: string) => input.trim(),
       });
     }
 
     // Prompt user with configured questions
-    let answers = await inquirer.prompt(questions, defaultValues);
+    let answers = await inquirer.prompt(questions);
 
-    // If user selected AI generation from the list
+    // If user selected AI generation from the list — same flow as `gitclean ai`
     if (answers.type === "ai_generate") {
-      try {
-        const generated = await AiGenerator.generateCommitMessage();
-        console.log(chalk.dim("\nGenerated message: ") + chalk.cyan(generated) + "\n");
-
-        // Re-run prompt with the generated message
-        return promptCommit(hookFile, generated);
-      } catch (error) {
-        console.error(chalk.red("\nAI Generation failed:"), error instanceof Error ? error.message : String(error));
-        console.log(chalk.yellow("Falling back to manual commit...\n"));
-        return promptCommit(hookFile);
-      }
+      return runAiCommitFlow(hookFile);
     }
 
     // Find the selected commit type from config

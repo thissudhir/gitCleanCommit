@@ -2,7 +2,7 @@
 
 import { Command } from "commander";
 import { showBanner } from "./banner.js";
-import { promptCommit } from "./prompt.js";
+import { promptCommit, runAiCommitFlow } from "./prompt.js";
 import {
   setupGitHook,
   removeGitHook,
@@ -22,7 +22,6 @@ import chalk from "chalk";
 import boxen from "boxen";
 import ora from "ora";
 import { createRequire } from "module";
-import * as readline from "readline";
 
 const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
 
@@ -472,74 +471,7 @@ program
   .description("Generate a conventional commit message using AI")
   .action(async () => {
     showBanner();
-    try {
-      let message = await AiGenerator.generateCommitMessage();
-
-      while (true) {
-        console.log(
-          boxen(chalk.green("AI Generated Message:\n\n") + chalk.white(message), {
-            padding: 0.5,
-            margin: 0.5,
-            borderColor: "green",
-            borderStyle: "round",
-            title: "AI Suggestion",
-            titleAlignment: "center",
-          })
-        );
-
-        const { action } = await inquirer.prompt([
-          {
-            name: "action",
-            type: "list",
-            message: "What would you like to do?",
-            choices: [
-              { name: `${chalk.green("✔")}  Commit with this message`, value: "commit" },
-              { name: `${chalk.blue("✎")}  Edit the message`,          value: "edit" },
-              { name: `${chalk.yellow("↺")}  Regenerate`,               value: "regenerate" },
-              { name: `${chalk.red("✖")}  Cancel`,                     value: "cancel" },
-            ],
-          },
-        ]);
-
-        if (action === "commit") {
-          await executeFullGitWorkflow(message);
-          break;
-        } else if (action === "edit") {
-          // Inquirer v12 shows `default` as a greyed-out hint, not pre-filled
-          // text — typing immediately clears the field. Use readline directly
-          // so we can write the current message into the input buffer, giving
-          // the user a real edit-in-place experience.
-          message = await new Promise<string>((resolve) => {
-            const rl = readline.createInterface({
-              input: process.stdin,
-              output: process.stdout,
-              terminal: true,
-            });
-            process.stdout.write(chalk.green("?") + " " + chalk.bold("Edit commit message: "));
-            rl.question("", (answer) => {
-              rl.close();
-              resolve(answer.trim() || message);
-            });
-            rl.write(message); // pre-fill the input buffer with the current message
-          });
-        } else if (action === "regenerate") {
-          message = await AiGenerator.generateCommitMessage();
-        } else {
-          console.log(
-            boxen(chalk.yellow("Operation cancelled"), {
-              padding: 0.5,
-              margin: 0.5,
-              borderColor: "yellow",
-              borderStyle: "round",
-            })
-          );
-          process.exit(0);
-        }
-      }
-    } catch (error) {
-      console.error(chalk.red("Generation failed:"), getErrorMessage(error));
-      process.exit(1);
-    }
+    await runAiCommitFlow();
   });
 
 program
