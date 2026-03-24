@@ -238,13 +238,13 @@ configCommand
           type: "list",
           message: "Which AI provider would you like to use?",
           choices: [
-            { name: `${chalk.yellow("◆")}  Gemini       ${chalk.dim("(Google — gemini-1.5-flash)")}`,        value: "gemini" },
-            { name: `${chalk.green("◆")}  OpenAI       ${chalk.dim("(gpt-4o-mini)")}`,                       value: "openai" },
-            { name: `${chalk.magenta("◆")}  Anthropic    ${chalk.dim("(claude-3-5-haiku)")}`,                value: "anthropic" },
-            { name: `${chalk.cyan("◆")}  Groq         ${chalk.dim("(fast + free tier — llama)")}`,           value: "groq" },
-            { name: `${chalk.blue("◆")}  DeepSeek     ${chalk.dim("(deepseek-chat)")}`,                      value: "deepseek" },
-            { name: `${chalk.white("◆")}  Ollama       ${chalk.dim("(local — no API key needed)")}`,         value: "ollama" },
-            { name: `${chalk.dim("◆")}  Custom       ${chalk.dim("(any OpenAI-compatible endpoint)")}`,      value: "custom" },
+            { name: `${chalk.yellow("Gemini")}    ${chalk.dim("(Google — gemini-1.5-flash)")}`,     value: "gemini" },
+            { name: `${chalk.green("OpenAI")}    ${chalk.dim("(gpt-4o-mini)")}`,                  value: "openai" },
+            { name: `${chalk.magenta("Anthropic")} ${chalk.dim("(claude-3-5-haiku)")}`,           value: "anthropic" },
+            { name: `${chalk.cyan("Groq")}      ${chalk.dim("(fast + free tier — llama)")}`,      value: "groq" },
+            { name: `${chalk.blue("DeepSeek")}  ${chalk.dim("(deepseek-chat)")}`,                 value: "deepseek" },
+            { name: `${chalk.white("Ollama")}    ${chalk.dim("(local — no API key needed)")}`,    value: "ollama" },
+            { name: `${chalk.dim("Custom")}    ${chalk.dim("(any OpenAI-compatible endpoint)")}`, value: "custom" },
           ],
         },
       ]);
@@ -287,11 +287,11 @@ configCommand
             message: "How would you like to provide your API key?",
             choices: [
               {
-                name: `${chalk.green("●")}  Save in config file  ${chalk.dim("(easy, but don't commit the file)")}`,
+                name: `${chalk.green("Save in config file")}  ${chalk.dim("(easy, but don't commit the file)")}`,
                 value: "config",
               },
               {
-                name: `${chalk.blue("●")}  I'll set it as an environment variable  ${chalk.dim(`(${defaults.envVar})`)}`,
+                name: `${chalk.blue("Set as environment variable")}  ${chalk.dim(`(${defaults.envVar})`)}`,
                 value: "env",
               },
             ],
@@ -338,7 +338,7 @@ configCommand
         lines.push(chalk.bold(`  export ${defaults.envVar}=your_key_here`));
         if (defaults.keyLink) lines.push(chalk.dim(`  Get a key: ${defaults.keyLink}`));
       } else if (keyStoredAs === "config") {
-        lines.push(`\n${chalk.red("⚠  Security reminder:")}`);
+        lines.push(`\n${chalk.red("Security reminder:")}`);
         lines.push(chalk.dim("  Add .gitclean.config.json to .gitignore if it contains your API key,"));
         lines.push(chalk.dim("  or use a global config (gitclean config ai --global) to keep it out of the repo."));
       }

@@ -373,10 +373,10 @@ export async function runAiCommitFlow(hookFile?: string): Promise<void> {
           type: "list",
           message: "What would you like to do?",
           choices: [
-            { name: `${chalk.green("✔")}  Commit with this message`, value: "commit" },
-            { name: `${chalk.blue("✎")}  Edit the message`,          value: "edit" },
-            { name: `${chalk.yellow("↺")}  Regenerate`,               value: "regenerate" },
-            { name: `${chalk.red("✖")}  Cancel`,                     value: "cancel" },
+            { name: chalk.green("Commit with this message"), value: "commit" },
+            { name: chalk.blue("Edit the message"),         value: "edit" },
+            { name: chalk.yellow("Regenerate"),             value: "regenerate" },
+            { name: chalk.red("Cancel"),                    value: "cancel" },
           ],
         },
       ]);
@@ -417,6 +417,10 @@ export async function runAiCommitFlow(hookFile?: string): Promise<void> {
       }
     }
   } catch (error) {
+    if (error && typeof error === "object" && "name" in error && (error as any).name === "ExitPromptError") {
+      handleEscapeKey();
+      return;
+    }
     console.error(chalk.red("Generation failed:"), error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
@@ -447,7 +451,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         choices: [
           ...getCommitTypes(),
           new inquirer.Separator(),
-          { name: chalk.magenta("✨ Generate with AI"), value: "ai_generate" },
+          { name: chalk.magenta("Generate with AI"), value: "ai_generate" },
         ],
         pageSize: 11,
         theme: {
