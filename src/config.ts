@@ -84,6 +84,7 @@ const DEFAULT_CONFIG: GitCleanConfig = {
   ai: {
     provider: "gemini",
     model: "gemini-1.5-flash",
+    apiKey: ""
   },
 };
 
@@ -149,9 +150,9 @@ function mergeConfigs(base: GitCleanConfig, override: GitCleanConfig): GitCleanC
     },
     ai: {
       provider: finalProvider as "gemini" | "openai" | "deepseek" | "anthropic" | "ollama" | "groq" | "custom",
-      model:    override.ai?.model   ?? (sameProvider ? base.ai?.model   : undefined),
-      apiKey:   override.ai?.apiKey  ?? (sameProvider ? base.ai?.apiKey  : undefined),
-      baseURL:  override.ai?.baseURL ?? (sameProvider ? base.ai?.baseURL : undefined),
+      model: override.ai?.model ?? (sameProvider ? base.ai?.model : undefined),
+      apiKey: override.ai?.apiKey ?? (sameProvider ? base.ai?.apiKey : undefined),
+      baseURL: override.ai?.baseURL ?? (sameProvider ? base.ai?.baseURL : undefined),
     },
   };
 }

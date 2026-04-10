@@ -197,14 +197,37 @@ configCommand
     }
   });
 
-const PROVIDER_DEFAULTS: Record<string, { model: string; envVar: string; keyLink: string }> = {
-  gemini:    { model: "gemini-1.5-flash",         envVar: "GEMINI_API_KEY",    keyLink: "https://aistudio.google.com/app/apikey" },
-  openai:    { model: "gpt-4o-mini",              envVar: "OPENAI_API_KEY",    keyLink: "https://platform.openai.com/api-keys" },
-  anthropic: { model: "claude-3-5-haiku-20241022",envVar: "ANTHROPIC_API_KEY", keyLink: "https://console.anthropic.com/settings/keys" },
-  groq:      { model: "llama-3.1-8b-instant",     envVar: "GROQ_API_KEY",      keyLink: "https://console.groq.com/keys" },
-  deepseek:  { model: "deepseek-chat",            envVar: "DEEPSEEK_API_KEY",  keyLink: "https://platform.deepseek.com/api_keys" },
-  ollama:    { model: "llama3.2",                 envVar: "",                  keyLink: "" },
-  custom:    { model: "",                         envVar: "AI_API_KEY",        keyLink: "" },
+const PROVIDER_DEFAULTS: Record<
+  string,
+  { model: string; envVar: string; keyLink: string }
+> = {
+  gemini: {
+    model: "gemini-1.5-flash",
+    envVar: "GEMINI_API_KEY",
+    keyLink: "https://aistudio.google.com/app/apikey",
+  },
+  openai: {
+    model: "gpt-4o-mini",
+    envVar: "OPENAI_API_KEY",
+    keyLink: "https://platform.openai.com/api-keys",
+  },
+  anthropic: {
+    model: "claude-3-5-haiku-20241022",
+    envVar: "ANTHROPIC_API_KEY",
+    keyLink: "https://console.anthropic.com/settings/keys",
+  },
+  groq: {
+    model: "llama-3.1-8b-instant",
+    envVar: "GROQ_API_KEY",
+    keyLink: "https://console.groq.com/keys",
+  },
+  deepseek: {
+    model: "deepseek-chat",
+    envVar: "DEEPSEEK_API_KEY",
+    keyLink: "https://platform.deepseek.com/api_keys",
+  },
+  ollama: { model: "llama3.2", envVar: "", keyLink: "" },
+  custom: { model: "", envVar: "AI_API_KEY", keyLink: "" },
 };
 
 configCommand
@@ -238,13 +261,34 @@ configCommand
           type: "list",
           message: "Which AI provider would you like to use?",
           choices: [
-            { name: `${chalk.yellow("Gemini")}    ${chalk.dim("(Google — gemini-1.5-flash)")}`,     value: "gemini" },
-            { name: `${chalk.green("OpenAI")}    ${chalk.dim("(gpt-4o-mini)")}`,                  value: "openai" },
-            { name: `${chalk.magenta("Anthropic")} ${chalk.dim("(claude-3-5-haiku)")}`,           value: "anthropic" },
-            { name: `${chalk.cyan("Groq")}      ${chalk.dim("(fast + free tier — llama)")}`,      value: "groq" },
-            { name: `${chalk.blue("DeepSeek")}  ${chalk.dim("(deepseek-chat)")}`,                 value: "deepseek" },
-            { name: `${chalk.white("Ollama")}    ${chalk.dim("(local — no API key needed)")}`,    value: "ollama" },
-            { name: `${chalk.dim("Custom")}    ${chalk.dim("(any OpenAI-compatible endpoint)")}`, value: "custom" },
+            {
+              name: `${chalk.yellow("Gemini")}    ${chalk.dim("(Google — gemini-1.5-flash)")}`,
+              value: "gemini",
+            },
+            {
+              name: `${chalk.green("OpenAI")}    ${chalk.dim("(gpt-4o-mini)")}`,
+              value: "openai",
+            },
+            {
+              name: `${chalk.magenta("Anthropic")} ${chalk.dim("(claude-3-5-haiku)")}`,
+              value: "anthropic",
+            },
+            {
+              name: `${chalk.cyan("Groq")}      ${chalk.dim("(fast + free tier — llama)")}`,
+              value: "groq",
+            },
+            {
+              name: `${chalk.blue("DeepSeek")}  ${chalk.dim("(deepseek-chat)")}`,
+              value: "deepseek",
+            },
+            {
+              name: `${chalk.white("Ollama")}    ${chalk.dim("(local — no API key needed)")}`,
+              value: "ollama",
+            },
+            {
+              name: `${chalk.dim("Custom")}    ${chalk.dim("(any OpenAI-compatible endpoint)")}`,
+              value: "custom",
+            },
           ],
         },
       ]);
@@ -470,7 +514,7 @@ program
   .command("ai")
   .description("Generate a conventional commit message using AI")
   .action(async () => {
-    showBanner();
+    showBanner("ai");
     await runAiCommitFlow();
   });
 
