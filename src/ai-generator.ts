@@ -4,10 +4,31 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import Anthropic from "@anthropic-ai/sdk";
 import { loadConfig } from "./config.js";
 import chalk from "chalk";
-import ora from "ora";
+import ora, { type Ora } from "ora";
 
-// Truncate large diffs to avoid hitting token limits
 const MAX_DIFF_LENGTH = 8000;
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAYS_MS = [1000, 2000]; // waits between attempts 1→2 and 2→3
+
+function isRetryableError(error: unknown): boolean {
+  if (error && typeof error === "object") {
+    const status = (error as any).status ?? (error as any).statusCode;
+    if (status === 429 || (status >= 500 && status < 600)) return true;
+    if (status === 400 || status === 401 || status === 403 || status === 404) return false;
+  }
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes("rate limit") || msg.includes("429")) return true;
+    if (msg.includes("timeout") || msg.includes("etimedout") || msg.includes("econnreset")) return true;
+    if (msg.includes("econnrefused")) return true;
+    if (msg.includes("unauthorized") || msg.includes("forbidden") || msg.includes("invalid api key")) return false;
+  }
+  return true;
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 interface GitContext {
   branch: string;
@@ -76,21 +97,19 @@ export class AiGenerator {
     try {
       const context = this.getGitContext();
       const truncatedDiff = this.truncateDiff(diff);
-      let message = "";
 
-      if (provider === "gemini") {
-        message = await this.generateWithGemini(
-          truncatedDiff, apiKey!, model || "gemini-1.5-flash", context
-        );
-      } else if (provider === "anthropic") {
-        message = await this.generateWithAnthropic(
-          truncatedDiff, apiKey!, model || "claude-3-5-haiku-20241022", context
-        );
-      } else {
-        message = await this.generateWithOpenAICompatible(
-          truncatedDiff, apiKey || "ollama", provider, model, config.ai?.baseURL, context
-        );
-      }
+      const message = await this.withRetry(
+        () => {
+          if (provider === "gemini") {
+            return this.generateWithGemini(truncatedDiff, apiKey!, model || "gemini-1.5-flash", context);
+          } else if (provider === "anthropic") {
+            return this.generateWithAnthropic(truncatedDiff, apiKey!, model || "claude-3-5-haiku-20241022", context);
+          } else {
+            return this.generateWithOpenAICompatible(truncatedDiff, apiKey || "ollama", provider, model, config.ai?.baseURL, context);
+          }
+        },
+        spinner
+      );
 
       spinner.succeed("AI generation successful!");
       return message.trim().replace(/^['"`]|['"`]$/g, "");
@@ -101,6 +120,29 @@ export class AiGenerator {
       }
       throw error;
     }
+  }
+
+  private static async withRetry<T>(
+    operation: () => Promise<T>,
+    spinner: Ora
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        const isLast = attempt === MAX_RETRY_ATTEMPTS;
+        if (isLast || !isRetryableError(error)) throw error;
+
+        const delayMs = RETRY_DELAYS_MS[attempt - 1];
+        const delaySec = delayMs / 1000;
+        spinner.text = chalk.yellow(
+          `Attempt ${attempt} failed — retrying in ${delaySec}s (${attempt + 1}/${MAX_RETRY_ATTEMPTS})...`
+        );
+        await sleep(delayMs);
+        spinner.text = chalk.blue(`Retrying with AI provider (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS})...`);
+      }
+    }
+    throw new Error("Unreachable");
   }
 
   private static getApiKeyFromEnv(provider: string): string | undefined {
