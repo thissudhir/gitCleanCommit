@@ -149,8 +149,12 @@ export function executeGitAmend(message: string): Promise<void> {
 
       const result = spawn("git", args, { stdio: "pipe" });
       result.on("close", (code) => {
-        if (code === 0) { spinner.succeed("Commit amended successfully!"); resolve(); }
-        else { spinner.fail("Amend failed"); reject(new Error("Amend failed")); }
+        if (code === 0) {
+          const info = getLastCommitInfo();
+          const hashTag = info.hash ? chalk.dim(" [") + chalk.cyan(info.hash) + chalk.dim("]") : "";
+          spinner.succeed("Commit amended!" + hashTag);
+          resolve();
+        } else { spinner.fail("Amend failed"); reject(new Error("Amend failed")); }
       });
       result.on("error", (error) => { spinner.fail("Amend failed"); reject(error); });
     } catch (error) {
@@ -217,8 +221,10 @@ export async function executeFullGitWorkflow(
     // Step 3: Push
     await executeGitPush();
 
-    console.log(chalk.green("\nGitClean workflow completed successfully!"));
-    console.log(chalk.dim(`Changes pushed to ${getCurrentBranch()}\n`));
+    const info = getLastCommitInfo();
+    const hashTag = info.hash ? chalk.dim(" [") + chalk.cyan(info.hash) + chalk.dim("]") : "";
+    console.log(chalk.green("\nGitClean workflow completed!") + hashTag);
+    console.log(chalk.dim(`  branch: ${info.branch}`) + (info.subject ? chalk.dim(`  ·  ${info.subject}`) : "") + "\n");
   } catch (error) {
     console.error(
       chalk.red("\nGitClean workflow failed:"),
@@ -303,4 +309,55 @@ export function getChangedFiles(): ChangedFile[] {
   }
 
   return files;
+}
+
+export function getDiffNumstat(): Map<string, { added: number; deleted: number }> {
+  const result = new Map<string, { added: number; deleted: number }>();
+  for (const cmd of ["git diff --numstat", "git diff --cached --numstat"]) {
+    try {
+      const output = execSync(cmd, { encoding: "utf8" }).trim();
+      for (const line of output.split("\n")) {
+        const parts = line.split("\t");
+        if (parts.length < 3) continue;
+        const added = parseInt(parts[0]);
+        const deleted = parseInt(parts[1]);
+        const file = parts[2];
+        if (!isNaN(added) && !isNaN(deleted) && file) {
+          const prev = result.get(file) ?? { added: 0, deleted: 0 };
+          result.set(file, { added: Math.max(prev.added, added), deleted: Math.max(prev.deleted, deleted) });
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  return result;
+}
+
+export function getRecentScopes(limit = 8): string[] {
+  try {
+    const log = execSync(`git log --pretty=format:%s -${limit * 5} --no-merges`, { encoding: "utf8" });
+    const scopes: string[] = [];
+    const seen = new Set<string>();
+    for (const line of log.split("\n")) {
+      const match = line.match(/^[A-Z]+\(([^)]+)\):/);
+      if (match && !seen.has(match[1])) {
+        seen.add(match[1]);
+        scopes.push(match[1]);
+        if (scopes.length >= limit) break;
+      }
+    }
+    return scopes;
+  } catch {
+    return [];
+  }
+}
+
+export function getLastCommitInfo(): { hash: string; branch: string; subject: string } {
+  try {
+    const hash = execSync("git log -1 --pretty=format:%h", { encoding: "utf8" }).trim();
+    const subject = execSync("git log -1 --pretty=format:%s", { encoding: "utf8" }).trim();
+    const branch = getCurrentBranch();
+    return { hash, branch, subject };
+  } catch {
+    return { hash: "", branch: "", subject: "" };
+  }
 }

@@ -11,7 +11,7 @@ export function registerCommitCommands(program: Command): void {
     .option("--hook <file>", "Hook mode: write to commit message file")
     .option("--amend", "Amend the last commit message")
     .action(async (options) => {
-      showBanner();
+      if (!options.amend) showBanner();
       await promptCommit(options.hook, options.amend ?? false);
     });
 

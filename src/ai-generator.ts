@@ -62,7 +62,7 @@ export class AiGenerator {
     );
   }
 
-  public static async generateCommitMessage(files: string[] = ["."]): Promise<string> {
+  public static async generateCommitMessage(files: string[] = ["."], hint?: string): Promise<string> {
     const config = loadConfig();
 
     try {
@@ -79,11 +79,9 @@ export class AiGenerator {
 
     const providerFromEnv = process.env.GITCLEAN_AI_PROVIDER as string | undefined;
     const provider = providerFromEnv || config.ai?.provider || "gemini";
-    // If provider is overridden via env, the config model belongs to a different provider — ignore it
     const model = process.env.GITCLEAN_AI_MODEL || (providerFromEnv ? undefined : config.ai?.model);
     const apiKey = config.ai?.apiKey || this.getApiKeyFromEnv(provider);
 
-    // Ollama runs locally — no API key required
     if (!apiKey && provider !== "ollama") {
       const envVar = this.getEnvVarName(provider);
       throw new Error(
@@ -96,16 +94,16 @@ export class AiGenerator {
 
     try {
       const context = this.getGitContext();
-      const truncatedDiff = this.truncateDiff(diff);
+      const prompt = this.buildPrompt(this.truncateDiff(diff), context, hint);
 
       const message = await this.withRetry(
         () => {
           if (provider === "gemini") {
-            return this.generateWithGemini(truncatedDiff, apiKey!, model || "gemini-1.5-flash", context);
+            return this.generateWithGemini(prompt, apiKey!, model || "gemini-1.5-flash");
           } else if (provider === "anthropic") {
-            return this.generateWithAnthropic(truncatedDiff, apiKey!, model || "claude-3-5-haiku-20241022", context);
+            return this.generateWithAnthropic(prompt, apiKey!, model || "claude-3-5-haiku-20241022");
           } else {
-            return this.generateWithOpenAICompatible(truncatedDiff, apiKey || "ollama", provider, model, config.ai?.baseURL, context);
+            return this.generateWithOpenAICompatible(prompt, apiKey || "ollama", provider, model, config.ai?.baseURL);
           }
         },
         spinner
@@ -168,16 +166,17 @@ export class AiGenerator {
     }
   }
 
-  private static buildPrompt(diff: string, context: GitContext): string {
+  private static buildPrompt(diff: string, context: GitContext, hint?: string): string {
     const contextSection = context.recentCommits
       ? `\nBranch: ${context.branch}\nRecent commits (for style reference):\n${context.recentCommits}\n`
       : `\nBranch: ${context.branch}\n`;
+    const hintSection = hint ? `\nAdditional focus: ${hint}\n` : "";
 
     return `Generate a clean, conventional commit message for the following git diff.
 ${contextSection}
 Git Diff:
 ${diff}
-
+${hintSection}
 Format: <TYPE>(<SCOPE>): <MESSAGE>
 Available Types: ADD, FIX, UPDATE, DOCS, TEST, REMOVE
 
@@ -190,66 +189,55 @@ Instructions:
   }
 
   private static async generateWithGemini(
-    diff: string,
+    prompt: string,
     apiKey: string,
-    modelName: string,
-    context: GitContext
+    modelName: string
   ): Promise<string> {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: modelName });
-    const result = await model.generateContent(this.buildPrompt(diff, context));
+    const result = await model.generateContent(prompt);
     return result.response.text();
   }
 
   private static async generateWithAnthropic(
-    diff: string,
+    prompt: string,
     apiKey: string,
-    modelName: string,
-    context: GitContext
+    modelName: string
   ): Promise<string> {
     const client = new Anthropic({ apiKey });
     const message = await client.messages.create({
       model: modelName,
       max_tokens: 256,
       system: "You are a professional developer assistant. You generate clean, conventional commit messages. Output only the commit message string — no explanations, no markdown.",
-      messages: [{ role: "user", content: this.buildPrompt(diff, context) }],
+      messages: [{ role: "user", content: prompt }],
     });
     const block = message.content[0];
     return block.type === "text" ? block.text : "";
   }
 
   private static async generateWithOpenAICompatible(
-    diff: string,
+    prompt: string,
     apiKey: string,
     provider: string,
     modelName?: string,
-    baseURL?: string,
-    context: GitContext = { branch: "unknown", recentCommits: "" }
+    baseURL?: string
   ): Promise<string> {
-    // Presets for common providers — all use OpenAI-compatible APIs
     const presets: Record<string, { model: string; baseURL: string }> = {
-      openai:   { model: "gpt-4o-mini",              baseURL: "https://api.openai.com/v1" },
-      deepseek: { model: "deepseek-chat",             baseURL: "https://api.deepseek.com" },
-      groq:     { model: "llama-3.1-8b-instant",      baseURL: "https://api.groq.com/openai/v1" },
-      ollama:   { model: "llama3.2",                  baseURL: "http://localhost:11434/v1" },
-      custom:   { model: "gpt-4o-mini",               baseURL: "" },
+      openai:   { model: "gpt-4o-mini",         baseURL: "https://api.openai.com/v1" },
+      deepseek: { model: "deepseek-chat",        baseURL: "https://api.deepseek.com" },
+      groq:     { model: "llama-3.1-8b-instant", baseURL: "https://api.groq.com/openai/v1" },
+      ollama:   { model: "llama3.2",             baseURL: "http://localhost:11434/v1" },
+      custom:   { model: "gpt-4o-mini",          baseURL: "" },
     };
 
     const preset = presets[provider] || presets.custom;
-
-    const client = new OpenAI({
-      apiKey,
-      baseURL: baseURL || preset.baseURL || undefined,
-    });
+    const client = new OpenAI({ apiKey, baseURL: baseURL || preset.baseURL || undefined });
 
     const completion = await client.chat.completions.create({
       model: modelName || preset.model,
       messages: [
-        {
-          role: "system",
-          content: "You are a professional developer assistant. You generate clean, conventional commit messages. Output only the commit message string — no explanations, no markdown.",
-        },
-        { role: "user", content: this.buildPrompt(diff, context) },
+        { role: "system", content: "You are a professional developer assistant. You generate clean, conventional commit messages. Output only the commit message string — no explanations, no markdown." },
+        { role: "user", content: prompt },
       ],
       temperature: 0.2,
       max_tokens: 256,
