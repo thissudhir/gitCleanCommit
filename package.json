@@ -52,7 +52,8 @@
     "inquirer": "^12.7.0",
     "openai": "^6.27.0",
     "ora": "^8.2.0",
-    "typo-js": "^1.2.4"
+    "typo-js": "^1.2.4",
+    "zod": "^4.4.2"
   },
   "devDependencies": {
     "@types/figlet": "^1.7.0",

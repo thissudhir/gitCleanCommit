@@ -229,3 +229,40 @@ export function getGitStatus(): string {
     return "";
   }
 }
+
+export interface ChangedFile {
+  path: string;
+  status: "modified" | "added" | "deleted" | "renamed" | "untracked";
+  staged: boolean;
+}
+
+export function getChangedFiles(): ChangedFile[] {
+  const output = getGitStatus();
+  const files: ChangedFile[] = [];
+
+  for (const line of output.split("\n")) {
+    if (!line.trim()) continue;
+
+    const x = line[0]; // staged status
+    const y = line[1]; // working tree status
+    let filePath = line.substring(3);
+
+    // Renames: "old-name -> new-name" — keep only the new name
+    if (filePath.includes(" -> ")) {
+      filePath = filePath.split(" -> ")[1];
+    }
+
+    const isUntracked = x === "?" && y === "?";
+    const isStaged = x !== " " && x !== "?";
+
+    let status: ChangedFile["status"] = "modified";
+    if (isUntracked) status = "untracked";
+    else if (x === "A") status = "added";
+    else if (x === "D" || y === "D") status = "deleted";
+    else if (x === "R") status = "renamed";
+
+    files.push({ path: filePath, status, staged: isStaged });
+  }
+
+  return files;
+}

@@ -2,7 +2,7 @@ import inquirer from "inquirer";
 import chalk from "chalk";
 import * as readline from "readline";
 import { GitCleanSpellChecker, SpellCheckResult } from "./spellcheck.js";
-import { executeFullGitWorkflow } from "./git-integration.js";
+import { executeFullGitWorkflow, getChangedFiles } from "./git-integration.js";
 import { writeFileSync } from "fs";
 import boxen from "boxen";
 import {
@@ -332,7 +332,7 @@ function formatCommitMessage(
   breaking?: boolean,
   issues?: string
 ): string {
-  let message = `${(chalk[type.color] as (text: string) => string)(header)}`;
+  let message = `${((chalk as any)[type.color] as (text: string) => string)(header)}`;
 
   if (body) {
     message += `\n\n${chalk.dim(body)}`;
@@ -426,6 +426,36 @@ export async function runAiCommitFlow(hookFile?: string): Promise<void> {
   }
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  modified:  chalk.yellow("modified "),
+  added:     chalk.green("new file "),
+  deleted:   chalk.red("deleted  "),
+  renamed:   chalk.blue("renamed  "),
+  untracked: chalk.dim("untracked"),
+};
+
+async function promptFileSelection(): Promise<string[]> {
+  const files = getChangedFiles();
+  if (files.length === 0) return [];
+
+  const { selected } = await inquirer.prompt([
+    {
+      name: "selected",
+      type: "checkbox",
+      message: "Select files to stage:",
+      choices: files.map((f) => ({
+        name: `${STATUS_LABEL[f.status] ?? chalk.dim("unknown  ")}  ${f.path}`,
+        value: f.path,
+        checked: true,
+      })),
+      validate: (choices: string[]) =>
+        choices.length > 0 || "Select at least one file to stage.",
+    } as any,
+  ]);
+
+  return selected as string[];
+}
+
 export async function promptCommit(hookFile?: string): Promise<void> {
   setupEscapeHandler();
 
@@ -442,6 +472,16 @@ export async function promptCommit(hookFile?: string): Promise<void> {
   };
 
   try {
+    // File selection (skip in hook mode — git already handled staging)
+    let selectedFiles: string[] = ["."];
+    if (!hookFile) {
+      selectedFiles = await promptFileSelection();
+      if (selectedFiles.length === 0) {
+        console.log(chalk.yellow("No files selected. Aborting."));
+        process.exit(0);
+      }
+    }
+
     // Build questions array based on config
     const questions: any[] = [
       {
@@ -594,7 +634,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         );
       } else {
         try {
-          await executeFullGitWorkflow(fullCommit);
+          await executeFullGitWorkflow(fullCommit, selectedFiles);
         } catch (error) {
           console.error(
             boxen(chalk.red("Failed to complete git workflow"), {
