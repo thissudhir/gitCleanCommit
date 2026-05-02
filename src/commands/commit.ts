@@ -9,9 +9,10 @@ export function registerCommitCommands(program: Command): void {
     .command("commit")
     .description("Create a conventional commit interactively")
     .option("--hook <file>", "Hook mode: write to commit message file")
+    .option("--amend", "Amend the last commit message")
     .action(async (options) => {
       showBanner();
-      await promptCommit(options.hook);
+      await promptCommit(options.hook, options.amend ?? false);
     });
 
   program

@@ -62,14 +62,14 @@ export class AiGenerator {
     );
   }
 
-  public static async generateCommitMessage(): Promise<string> {
+  public static async generateCommitMessage(files: string[] = ["."]): Promise<string> {
     const config = loadConfig();
 
-    // Auto-stage all changes
     try {
-      execSync("git add .", { stdio: "ignore" });
+      const args = ["add", "--", ...files];
+      execSync(`git ${args.join(" ")}`, { stdio: "ignore" });
     } catch {
-      // Ignore — not in a git repo or nothing to add
+      // not in a git repo or nothing to add
     }
 
     const diff = await this.getStagedDiff();

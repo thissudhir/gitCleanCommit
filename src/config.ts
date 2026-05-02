@@ -315,7 +315,9 @@ export function updateAiConfig(
   let existing: GitCleanConfig = {};
   if (existsSync(configPath)) {
     try {
-      existing = JSON.parse(readFileSync(configPath, "utf-8"));
+      const raw = JSON.parse(stripComments(readFileSync(configPath, "utf-8")));
+      const result = GitCleanConfigSchema.safeParse(raw);
+      existing = result.success ? result.data : {};
     } catch {
       existing = {};
     }

@@ -2,7 +2,13 @@ import inquirer from "inquirer";
 import chalk from "chalk";
 import * as readline from "readline";
 import { GitCleanSpellChecker, SpellCheckResult } from "./spellcheck.js";
-import { executeFullGitWorkflow, getChangedFiles } from "./git-integration.js";
+import {
+  executeFullGitWorkflow,
+  executeGitAmend,
+  getChangedFiles,
+  getScopeFromBranch,
+  getLastCommitMessage,
+} from "./git-integration.js";
 import { writeFileSync } from "fs";
 import boxen from "boxen";
 import {
@@ -13,6 +19,11 @@ import {
 } from "./config.js";
 import { AiGenerator } from "./ai-generator.js";
 
+function parseConventionalCommit(msg: string): { type: string; scope: string; message: string } | null {
+  const match = msg.match(/^([A-Z]+)(?:\(([^)]+)\))?!?: (.+)/);
+  if (!match) return null;
+  return { type: match[1], scope: match[2] ?? "", message: match[3] };
+}
 
 
 // Custom inquirer prompt with real-time spell checking
@@ -353,7 +364,13 @@ function formatCommitMessage(
 
 export async function runAiCommitFlow(hookFile?: string): Promise<void> {
   try {
-    let message = await AiGenerator.generateCommitMessage();
+    const selectedFiles = hookFile ? ["."] : await promptFileSelection();
+    if (!hookFile && selectedFiles.length === 0) {
+      console.log(chalk.yellow("No files selected. Aborting."));
+      process.exit(0);
+    }
+
+    let message = await AiGenerator.generateCommitMessage(selectedFiles);
 
     while (true) {
       console.log(
@@ -385,7 +402,7 @@ export async function runAiCommitFlow(hookFile?: string): Promise<void> {
         if (hookFile) {
           writeFileSync(hookFile, message);
         } else {
-          await executeFullGitWorkflow(message);
+          await executeFullGitWorkflow(message, selectedFiles);
         }
         break;
       } else if (action === "edit") {
@@ -456,13 +473,11 @@ async function promptFileSelection(): Promise<string[]> {
   return selected as string[];
 }
 
-export async function promptCommit(hookFile?: string): Promise<void> {
+export async function promptCommit(hookFile?: string, amend = false): Promise<void> {
   setupEscapeHandler();
 
-  // Initialize spell checker
   await GitCleanSpellChecker.initialize();
 
-  // Load configuration
   const config = loadConfig();
   const promptsConfig = config.prompts || {
     scope: true,
@@ -471,10 +486,16 @@ export async function promptCommit(hookFile?: string): Promise<void> {
     issues: false,
   };
 
+  // Parse last commit for amend pre-fill
+  const lastCommit = amend ? parseConventionalCommit(getLastCommitMessage()) : null;
+
+  // Suggest scope from branch name (e.g. feat/auth → "auth")
+  const branchScope = getScopeFromBranch();
+
   try {
-    // File selection (skip in hook mode — git already handled staging)
+    // File selection — skip for hook mode and amend (staging is caller's responsibility)
     let selectedFiles: string[] = ["."];
-    if (!hookFile) {
+    if (!hookFile && !amend) {
       selectedFiles = await promptFileSelection();
       if (selectedFiles.length === 0) {
         console.log(chalk.yellow("No files selected. Aborting."));
@@ -487,16 +508,14 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       {
         name: "type",
         type: "list",
-        message: "Select the type of change you're committing:",
+        message: amend ? "Select new commit type:" : "Select the type of change you're committing:",
         choices: [
           ...getCommitTypes(),
-          new inquirer.Separator(),
-          { name: chalk.magenta("Generate with AI"), value: "ai_generate" },
+          ...(amend ? [] : [new inquirer.Separator(), { name: chalk.magenta("Generate with AI"), value: "ai_generate" }]),
         ],
+        default: lastCommit?.type ?? undefined,
         pageSize: 11,
-        theme: {
-          helpMode: "never",
-        },
+        theme: { helpMode: "never" },
       },
     ];
 
@@ -507,6 +526,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         type: "input",
         message: "What is the scope of this change? (optional):",
         when: (a: any) => a.type !== "ai_generate",
+        default: lastCommit?.scope || branchScope || undefined,
         filter: (input: string) => input.trim(),
       });
     }
@@ -516,6 +536,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       name: "message",
       type: "spellcheck" as any,
       message: "Write a short, commit message:",
+      default: lastCommit?.message ?? undefined,
       when: (a: any) => a.type !== "ai_generate",
       validate: (input: string) => {
         if (input.trim().length < 1) {
@@ -634,10 +655,14 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         );
       } else {
         try {
-          await executeFullGitWorkflow(fullCommit, selectedFiles);
+          if (amend) {
+            await executeGitAmend(fullCommit);
+          } else {
+            await executeFullGitWorkflow(fullCommit, selectedFiles);
+          }
         } catch (error) {
           console.error(
-            boxen(chalk.red("Failed to complete git workflow"), {
+            boxen(chalk.red(`Failed to ${amend ? "amend" : "complete git workflow"}`), {
               padding: 0.5,
               margin: 0.5,
               borderColor: "red",

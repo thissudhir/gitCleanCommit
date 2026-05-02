@@ -3,12 +3,7 @@ import { writeFileSync, readFileSync, existsSync, chmodSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
 import ora from "ora";
-
-// Helper function to safely get error message
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
-}
+import { getErrorMessage } from "./utils.js";
 
 export function findGitRoot(): string {
   try {
@@ -29,6 +24,28 @@ export function getCurrentBranch(): string {
     return branch;
   } catch (error) {
     throw new Error("Failed to get current branch");
+  }
+}
+
+export function getScopeFromBranch(): string | null {
+  try {
+    const branch = getCurrentBranch();
+    if (!branch.includes("/")) return null;
+
+    let scope = branch.split("/").slice(1).join("/");
+    // Strip leading issue-number prefixes: GH-123-, JIRA-456-, 123-
+    scope = scope.replace(/^([A-Z]+-\d+|#?\d+)-/, "");
+    return scope.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function getLastCommitMessage(): string {
+  try {
+    return execSync("git log -1 --pretty=%B", { encoding: "utf8" }).trim();
+  } catch {
+    return "";
   }
 }
 
@@ -117,6 +134,27 @@ export function executeGitCommit(message: string): Promise<void> {
       });
     } catch (error) {
       spinner.fail("Commit failed");
+      reject(error);
+    }
+  });
+}
+
+export function executeGitAmend(message: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const spinner = ora("Amending last commit...").start();
+    try {
+      const messageParts = message.split("\n\n").filter((part) => part.trim());
+      const args = ["commit", "--amend"];
+      messageParts.forEach((part) => args.push("-m", part.trim()));
+
+      const result = spawn("git", args, { stdio: "pipe" });
+      result.on("close", (code) => {
+        if (code === 0) { spinner.succeed("Commit amended successfully!"); resolve(); }
+        else { spinner.fail("Amend failed"); reject(new Error("Amend failed")); }
+      });
+      result.on("error", (error) => { spinner.fail("Amend failed"); reject(error); });
+    } catch (error) {
+      spinner.fail("Amend failed");
       reject(error);
     }
   });
