@@ -1,6 +1,6 @@
 # GitClean
 
-![Image](https://github.com/user-attachments/assets/85c1dbf3-2d32-475c-bb1b-db30971d50c8)
+![Image](https://github-production-user-asset-6210df.s3.amazonaws.com/78488663/529356867-85c1dbf3-2d32-475c-bb1b-db30971d50c8.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAVCODYLSA53PQK4ZA%2F20260502%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260502T175024Z&X-Amz-Expires=300&X-Amz-Signature=aece5f432a4e5682db19cb7dfdec954d2ecf5f998f76558eff7cd6a9e6594bed&X-Amz-SignedHeaders=host&response-content-type=image%2Fpng)
 
 > A beautiful CLI tool for creating clean, conventional git commits with real-time spell checking, AI-powered message generation, and seamless git workflow automation
 
@@ -10,7 +10,7 @@
 
 ## Demo
 
-![Image](https://github.com/user-attachments/assets/84fcd915-cdb4-40b2-b54d-17f99e831511)
+![Image](https://github-production-user-asset-6210df.s3.amazonaws.com/78488663/529343274-84fcd915-cdb4-40b2-b54d-17f99e831511.gif?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAVCODYLSA53PQK4ZA%2F20260502%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260502T175206Z&X-Amz-Expires=300&X-Amz-Signature=f4a9d800069f6bd14a610c458227ab1f6ff4ac80d8996b047b45403477f91dff&X-Amz-SignedHeaders=host&response-content-type=image%2Fgif)
 
 ## Quick Start
 
@@ -130,9 +130,9 @@ Example configuration:
 {
   "prompts": {
     "scope": true,
-    "body": true,        // Enable detailed description
-    "breaking": true,    // Enable breaking changes prompt
-    "issues": true       // Enable issue references (fixes #123)
+    "body": true, // Enable detailed description
+    "breaking": true, // Enable breaking changes prompt
+    "issues": true // Enable issue references (fixes #123)
   }
 }
 ```
@@ -229,15 +229,15 @@ gitclean ai
 
 ### Supported Providers
 
-| Provider | Models | Needs API Key |
-|----------|--------|---------------|
-| **Gemini** | `gemini-1.5-flash`, `gemini-1.5-pro`, `gemini-2.0-flash` | Yes — [aistudio.google.com](https://aistudio.google.com) |
-| **OpenAI** | `gpt-4o-mini`, `gpt-4o`, `o1-mini` | Yes — [platform.openai.com](https://platform.openai.com) |
-| **Anthropic** | `claude-3-5-haiku-20241022`, `claude-3-5-sonnet-20241022`, `claude-opus-4-5` | Yes — [console.anthropic.com](https://console.anthropic.com) |
-| **Groq** | `llama-3.1-8b-instant`, `llama-3.3-70b-versatile`, `mixtral-8x7b-32768` | Yes (free tier) — [console.groq.com](https://console.groq.com) |
-| **Ollama** | `llama3.2`, `codellama`, `mistral`, `qwen2.5-coder`, any local model | No |
-| **DeepSeek** | `deepseek-chat`, `deepseek-reasoner` | Yes — [platform.deepseek.com](https://platform.deepseek.com) |
-| **Custom** | Any model | Depends on provider |
+| Provider      | Models                                                                       | Needs API Key                                                  |
+| ------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| **Gemini**    | `gemini-1.5-flash`, `gemini-1.5-pro`, `gemini-2.0-flash`                     | Yes — [aistudio.google.com](https://aistudio.google.com)       |
+| **OpenAI**    | `gpt-4o-mini`, `gpt-4o`, `o1-mini`                                           | Yes — [platform.openai.com](https://platform.openai.com)       |
+| **Anthropic** | `claude-3-5-haiku-20241022`, `claude-3-5-sonnet-20241022`, `claude-opus-4-5` | Yes — [console.anthropic.com](https://console.anthropic.com)   |
+| **Groq**      | `llama-3.1-8b-instant`, `llama-3.3-70b-versatile`, `mixtral-8x7b-32768`      | Yes (free tier) — [console.groq.com](https://console.groq.com) |
+| **Ollama**    | `llama3.2`, `codellama`, `mistral`, `qwen2.5-coder`, any local model         | No                                                             |
+| **DeepSeek**  | `deepseek-chat`, `deepseek-reasoner`                                         | Yes — [platform.deepseek.com](https://platform.deepseek.com)   |
+| **Custom**    | Any model                                                                    | Depends on provider                                            |
 
 > **Open-source / local models**: Ollama, LM Studio, Jan, vLLM, and any other server that exposes an OpenAI-compatible `/v1` endpoint all work via `provider: "custom"` or `provider: "ollama"`.
 
@@ -369,16 +369,16 @@ GROQ_API_KEY=your_key GITCLEAN_AI_PROVIDER=groq GITCLEAN_AI_MODEL=llama-3.3-70b-
 
 Supported env vars:
 
-| Variable | Used for |
-|----------|----------|
-| `GEMINI_API_KEY` | Gemini |
-| `OPENAI_API_KEY` | OpenAI |
-| `ANTHROPIC_API_KEY` | Anthropic / Claude |
-| `GROQ_API_KEY` | Groq |
-| `DEEPSEEK_API_KEY` | DeepSeek |
-| `AI_API_KEY` | Any custom provider |
+| Variable               | Used for                         |
+| ---------------------- | -------------------------------- |
+| `GEMINI_API_KEY`       | Gemini                           |
+| `OPENAI_API_KEY`       | OpenAI                           |
+| `ANTHROPIC_API_KEY`    | Anthropic / Claude               |
+| `GROQ_API_KEY`         | Groq                             |
+| `DEEPSEEK_API_KEY`     | DeepSeek                         |
+| `AI_API_KEY`           | Any custom provider              |
 | `GITCLEAN_AI_PROVIDER` | Override the configured provider |
-| `GITCLEAN_AI_MODEL` | Override the configured model |
+| `GITCLEAN_AI_MODEL`    | Override the configured model    |
 
 ---
 

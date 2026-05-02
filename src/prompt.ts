@@ -1,8 +1,15 @@
 import inquirer from "inquirer";
 import chalk from "chalk";
-import * as readline from "readline";
 import { GitCleanSpellChecker, SpellCheckResult } from "./spellcheck.js";
-import { executeFullGitWorkflow } from "./git-integration.js";
+import {
+  executeFullGitWorkflow,
+  executeGitAmend,
+  getChangedFiles,
+  getDiffNumstat,
+  getScopeFromBranch,
+  getRecentScopes,
+  getLastCommitMessage,
+} from "./git-integration.js";
 import { writeFileSync } from "fs";
 import boxen from "boxen";
 import {
@@ -13,6 +20,11 @@ import {
 } from "./config.js";
 import { AiGenerator } from "./ai-generator.js";
 
+function parseConventionalCommit(msg: string): { type: string; scope: string; message: string } | null {
+  const match = msg.match(/^([A-Z]+)(?:\(([^)]+)\))?!?: (.+)/);
+  if (!match) return null;
+  return { type: match[1], scope: match[2] ?? "", message: match[3] };
+}
 
 
 // Custom inquirer prompt with real-time spell checking
@@ -221,45 +233,43 @@ class SpellCheckPrompt {
     const promptPrefix = `${chalk.cyan("?")} ${chalk.bold(questionText)} `;
     process.stdout.write(promptPrefix);
 
-    // Show text with spell checking and cursor
+    // Show text with spell checking
     const displayText = this.createDisplayText();
     process.stdout.write(displayText);
 
-    // Calculate how many lines we're using NOW (for next render)
-    // Get terminal width (default to 80 if not available)
+    // Live character counter (shown when charLimit is set on the question)
+    const charLimit: number | undefined = (this.question as any).charLimit;
+    let counterText = "";
+    if (charLimit) {
+      const len = this.currentText.length;
+      const counterColor = len > charLimit ? chalk.red : len > Math.floor(charLimit * 0.8) ? chalk.yellow : chalk.dim;
+      counterText = counterColor(` ${len}/${charLimit}`);
+      process.stdout.write(counterText);
+    }
+
+    // Calculate line count for next render — include counter in total width
     const terminalWidth = process.stdout.columns || 80;
-    // Strip ANSI codes to get actual text length for line calculation
     const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, '');
     const promptLength = stripAnsi(promptPrefix).length;
     const textLength = this.currentText.length;
-    const totalLength = promptLength + textLength;
-    this.previousLineCount = Math.ceil(totalLength / terminalWidth);
+    const counterLength = stripAnsi(counterText).length;
+    this.previousLineCount = Math.max(1, Math.ceil((promptLength + textLength + counterLength) / terminalWidth));
 
-    // Move cursor to correct position accounting for line wrapping
+    // Cursor positioning — counter sits after the text, so endAbsolutePosition includes it
     const cursorAbsolutePosition = promptLength + this.cursorPosition;
-    const endAbsolutePosition = promptLength + textLength;
+    const endAbsolutePosition = promptLength + textLength + counterLength;
 
-    // Calculate which line the cursor should be on (0-indexed from current line)
     const cursorLine = Math.floor(cursorAbsolutePosition / terminalWidth);
     const endLine = Math.floor(endAbsolutePosition / terminalWidth);
-
-    // Calculate column position on that line
     const cursorColumn = cursorAbsolutePosition % terminalWidth;
     const endColumn = endAbsolutePosition % terminalWidth;
 
-    // Move cursor to correct position
     if (endLine > cursorLine) {
-      // Need to move up lines
       const linesToMoveUp = endLine - cursorLine;
       process.stdout.write(`\x1b[${linesToMoveUp}A`);
-      // Then move to correct column (from start of line)
-      if (cursorColumn > 0) {
-        process.stdout.write(`\x1b[${cursorColumn}C`);
-      }
+      if (cursorColumn > 0) process.stdout.write(`\x1b[${cursorColumn}C`);
     } else if (endColumn > cursorColumn) {
-      // Same line, just move back
-      const charsToMoveBack = endColumn - cursorColumn;
-      process.stdout.write(`\x1b[${charsToMoveBack}D`);
+      process.stdout.write(`\x1b[${endColumn - cursorColumn}D`);
     }
   }
 
@@ -332,7 +342,7 @@ function formatCommitMessage(
   breaking?: boolean,
   issues?: string
 ): string {
-  let message = `${(chalk[type.color] as (text: string) => string)(header)}`;
+  let message = `${((chalk as any)[type.color] as (text: string) => string)(header)}`;
 
   if (body) {
     message += `\n\n${chalk.dim(body)}`;
@@ -353,7 +363,13 @@ function formatCommitMessage(
 
 export async function runAiCommitFlow(hookFile?: string): Promise<void> {
   try {
-    let message = await AiGenerator.generateCommitMessage();
+    const selectedFiles = hookFile ? ["."] : await promptFileSelection();
+    if (!hookFile && selectedFiles.length === 0) {
+      console.log(chalk.yellow("No files selected. Aborting."));
+      process.exit(0);
+    }
+
+    let message = await AiGenerator.generateCommitMessage(selectedFiles);
 
     while (true) {
       console.log(
@@ -373,10 +389,11 @@ export async function runAiCommitFlow(hookFile?: string): Promise<void> {
           type: "list",
           message: "What would you like to do?",
           choices: [
-            { name: chalk.green("Commit with this message"), value: "commit" },
-            { name: chalk.blue("Edit the message"),         value: "edit" },
-            { name: chalk.yellow("Regenerate"),             value: "regenerate" },
-            { name: chalk.red("Cancel"),                    value: "cancel" },
+            { name: chalk.green("✔ Commit with this message"),  value: "commit" },
+            { name: chalk.blue("✎ Edit the message"),           value: "edit" },
+            { name: chalk.yellow("↺ Regenerate"),               value: "regenerate" },
+            { name: chalk.cyan("↺ Regenerate with hint..."),    value: "regenerate_hint" },
+            { name: chalk.red("✖ Cancel"),                      value: "cancel" },
           ],
         },
       ]);
@@ -385,25 +402,30 @@ export async function runAiCommitFlow(hookFile?: string): Promise<void> {
         if (hookFile) {
           writeFileSync(hookFile, message);
         } else {
-          await executeFullGitWorkflow(message);
+          await executeFullGitWorkflow(message, selectedFiles);
         }
         break;
       } else if (action === "edit") {
-        message = await new Promise<string>((resolve) => {
-          const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-            terminal: true,
-          });
-          process.stdout.write(chalk.green("?") + " " + chalk.bold("Edit commit message: "));
-          rl.question("", (answer) => {
-            rl.close();
-            resolve(answer.trim() || message);
-          });
-          rl.write(message);
-        });
+        const { edited } = await inquirer.prompt([{
+          name: "edited",
+          type: "spellcheck" as any,
+          message: "Edit commit message:",
+          default: message,
+          charLimit: 72,
+          validate: (v: string) => v.trim().length > 0 || "Message cannot be empty",
+          filter: (v: string) => v.trim(),
+        } as any]);
+        message = edited;
       } else if (action === "regenerate") {
-        message = await AiGenerator.generateCommitMessage();
+        message = await AiGenerator.generateCommitMessage(selectedFiles);
+      } else if (action === "regenerate_hint") {
+        const { hint } = await inquirer.prompt([{
+          name: "hint",
+          type: "input",
+          message: "Hint for AI (e.g. 'focus on the auth changes'):",
+          validate: (v: string) => v.trim().length > 0 || "Enter a hint",
+        }]);
+        message = await AiGenerator.generateCommitMessage(selectedFiles, hint.trim());
       } else {
         console.log(
           boxen(chalk.yellow("Operation cancelled"), {
@@ -426,13 +448,49 @@ export async function runAiCommitFlow(hookFile?: string): Promise<void> {
   }
 }
 
-export async function promptCommit(hookFile?: string): Promise<void> {
+const STATUS_LABEL: Record<string, string> = {
+  modified:  chalk.yellow("modified "),
+  added:     chalk.green("new file "),
+  deleted:   chalk.red("deleted  "),
+  renamed:   chalk.blue("renamed  "),
+  untracked: chalk.dim("untracked"),
+};
+
+async function promptFileSelection(): Promise<string[]> {
+  const files = getChangedFiles();
+  if (files.length === 0) return [];
+
+  const stats = getDiffNumstat();
+
+  const { selected } = await inquirer.prompt([
+    {
+      name: "selected",
+      type: "checkbox",
+      message: "Select files to stage:",
+      choices: files.map((f) => {
+        const stat = stats.get(f.path);
+        const statStr = stat
+          ? chalk.dim("  ") + chalk.green(`+${stat.added}`) + chalk.dim(" ") + chalk.red(`-${stat.deleted}`)
+          : "";
+        return {
+          name: `${STATUS_LABEL[f.status] ?? chalk.dim("unknown  ")}  ${f.path}${statStr}`,
+          value: f.path,
+          checked: true,
+        };
+      }),
+      validate: (choices: string[]) =>
+        choices.length > 0 || "Select at least one file to stage.",
+    } as any,
+  ]);
+
+  return selected as string[];
+}
+
+export async function promptCommit(hookFile?: string, amend = false): Promise<void> {
   setupEscapeHandler();
 
-  // Initialize spell checker
   await GitCleanSpellChecker.initialize();
 
-  // Load configuration
   const config = loadConfig();
   const promptsConfig = config.prompts || {
     scope: true,
@@ -441,22 +499,80 @@ export async function promptCommit(hookFile?: string): Promise<void> {
     issues: false,
   };
 
+  // Parse last commit for amend pre-fill
+  const lastCommit = amend ? parseConventionalCommit(getLastCommitMessage()) : null;
+
+  // Suggest scope from branch name (e.g. feat/auth → "auth")
+  const branchScope = getScopeFromBranch();
+
   try {
+    // File selection — skip for hook mode and amend (staging is caller's responsibility)
+    let selectedFiles: string[] = ["."];
+    if (!hookFile && !amend) {
+      selectedFiles = await promptFileSelection();
+      if (selectedFiles.length === 0) {
+        console.log(chalk.yellow("No files selected. Aborting."));
+        process.exit(0);
+      }
+    }
+
+    // Diff summary box — show after file selection, before prompts
+    if (!hookFile && !amend) {
+      const stats = getDiffNumstat();
+      const changedFiles = getChangedFiles().filter(
+        (f) => selectedFiles[0] === "." || selectedFiles.includes(f.path)
+      );
+      if (changedFiles.length > 0) {
+        const lines = changedFiles.map((f) => {
+          const stat = stats.get(f.path);
+          const statStr = stat
+            ? chalk.green(` +${stat.added}`) + chalk.dim("/") + chalk.red(`-${stat.deleted}`)
+            : "";
+          return `  ${STATUS_LABEL[f.status] ?? chalk.dim("unknown")}  ${f.path}${statStr}`;
+        });
+        console.log(
+          boxen(lines.join("\n"), {
+            padding: 0.5,
+            margin: { top: 0, bottom: 1, left: 0, right: 0 },
+            borderColor: "dim",
+            borderStyle: "round",
+            title: `${changedFiles.length} file${changedFiles.length !== 1 ? "s" : ""} staged`,
+            titleAlignment: "center",
+          })
+        );
+      }
+    }
+
+    // Step counter
+    const totalSteps =
+      1 +
+      (promptsConfig.scope ? 1 : 0) +
+      1 +
+      (promptsConfig.body ? 1 : 0) +
+      (promptsConfig.breaking ? 1 : 0) +
+      (promptsConfig.issues ? 1 : 0);
+    let step = 0;
+    const s = () => chalk.dim(`[${++step}/${totalSteps}] `);
+
+    // Recent scopes for autocomplete hint
+    const recentScopes = getRecentScopes();
+    const scopeHint = recentScopes.length > 0
+      ? chalk.dim(` — recent: ${recentScopes.slice(0, 4).join(", ")}`)
+      : "";
+
     // Build questions array based on config
     const questions: any[] = [
       {
         name: "type",
         type: "list",
-        message: "Select the type of change you're committing:",
+        message: s() + (amend ? "Select new commit type:" : "Select commit type:"),
         choices: [
           ...getCommitTypes(),
-          new inquirer.Separator(),
-          { name: chalk.magenta("Generate with AI"), value: "ai_generate" },
+          ...(amend ? [] : [new inquirer.Separator(), { name: chalk.magenta("Generate with AI"), value: "ai_generate" }]),
         ],
+        default: lastCommit?.type ?? undefined,
         pageSize: 11,
-        theme: {
-          helpMode: "never",
-        },
+        theme: { helpMode: "never" },
       },
     ];
 
@@ -465,8 +581,9 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       questions.push({
         name: "scope",
         type: "input",
-        message: "What is the scope of this change? (optional):",
+        message: s() + `Scope (optional)${scopeHint}:`,
         when: (a: any) => a.type !== "ai_generate",
+        default: lastCommit?.scope || branchScope || undefined,
         filter: (input: string) => input.trim(),
       });
     }
@@ -475,7 +592,9 @@ export async function promptCommit(hookFile?: string): Promise<void> {
     questions.push({
       name: "message",
       type: "spellcheck" as any,
-      message: "Write a short, commit message:",
+      message: s() + "Commit message:",
+      default: lastCommit?.message ?? undefined,
+      charLimit: 72,
       when: (a: any) => a.type !== "ai_generate",
       validate: (input: string) => {
         if (input.trim().length < 1) {
@@ -494,7 +613,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       questions.push({
         name: "body",
         type: "spellcheck" as any,
-        message: "Provide a longer description (optional):",
+        message: s() + "Longer description (optional):",
         when: (a: any) => a.type !== "ai_generate",
         filter: (input: string) => input.trim(),
       });
@@ -505,7 +624,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       questions.push({
         name: "breaking",
         type: "confirm",
-        message: "Are there any breaking changes?",
+        message: s() + "Are there any breaking changes?",
         when: (a: any) => a.type !== "ai_generate",
         default: false,
       });
@@ -516,7 +635,7 @@ export async function promptCommit(hookFile?: string): Promise<void> {
       questions.push({
         name: "issues",
         type: "input",
-        message: 'Add issue references (e.g., "fixes #123", "closes #456"):',
+        message: s() + 'Issue references (e.g., "fixes #123"):',
         when: (a: any) => a.type !== "ai_generate",
         filter: (input: string) => input.trim(),
       });
@@ -594,10 +713,14 @@ export async function promptCommit(hookFile?: string): Promise<void> {
         );
       } else {
         try {
-          await executeFullGitWorkflow(fullCommit);
+          if (amend) {
+            await executeGitAmend(fullCommit);
+          } else {
+            await executeFullGitWorkflow(fullCommit, selectedFiles);
+          }
         } catch (error) {
           console.error(
-            boxen(chalk.red("Failed to complete git workflow"), {
+            boxen(chalk.red(`Failed to ${amend ? "amend" : "complete git workflow"}`), {
               padding: 0.5,
               margin: 0.5,
               borderColor: "red",

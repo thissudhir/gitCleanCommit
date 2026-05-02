@@ -3,12 +3,7 @@ import { writeFileSync, readFileSync, existsSync, chmodSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
 import ora from "ora";
-
-// Helper function to safely get error message
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
-}
+import { getErrorMessage } from "./utils.js";
 
 export function findGitRoot(): string {
   try {
@@ -29,6 +24,28 @@ export function getCurrentBranch(): string {
     return branch;
   } catch (error) {
     throw new Error("Failed to get current branch");
+  }
+}
+
+export function getScopeFromBranch(): string | null {
+  try {
+    const branch = getCurrentBranch();
+    if (!branch.includes("/")) return null;
+
+    let scope = branch.split("/").slice(1).join("/");
+    // Strip leading issue-number prefixes: GH-123-, JIRA-456-, 123-
+    scope = scope.replace(/^([A-Z]+-\d+|#?\d+)-/, "");
+    return scope.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function getLastCommitMessage(): string {
+  try {
+    return execSync("git log -1 --pretty=%B", { encoding: "utf8" }).trim();
+  } catch {
+    return "";
   }
 }
 
@@ -122,6 +139,31 @@ export function executeGitCommit(message: string): Promise<void> {
   });
 }
 
+export function executeGitAmend(message: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const spinner = ora("Amending last commit...").start();
+    try {
+      const messageParts = message.split("\n\n").filter((part) => part.trim());
+      const args = ["commit", "--amend"];
+      messageParts.forEach((part) => args.push("-m", part.trim()));
+
+      const result = spawn("git", args, { stdio: "pipe" });
+      result.on("close", (code) => {
+        if (code === 0) {
+          const info = getLastCommitInfo();
+          const hashTag = info.hash ? chalk.dim(" [") + chalk.cyan(info.hash) + chalk.dim("]") : "";
+          spinner.succeed("Commit amended!" + hashTag);
+          resolve();
+        } else { spinner.fail("Amend failed"); reject(new Error("Amend failed")); }
+      });
+      result.on("error", (error) => { spinner.fail("Amend failed"); reject(error); });
+    } catch (error) {
+      spinner.fail("Amend failed");
+      reject(error);
+    }
+  });
+}
+
 export function executeGitPush(): Promise<void> {
   return new Promise((resolve, reject) => {
     const spinner = ora("Pushing to remote...").start();
@@ -179,8 +221,10 @@ export async function executeFullGitWorkflow(
     // Step 3: Push
     await executeGitPush();
 
-    console.log(chalk.green("\nGitClean workflow completed successfully!"));
-    console.log(chalk.dim(`Changes pushed to ${getCurrentBranch()}\n`));
+    const info = getLastCommitInfo();
+    const hashTag = info.hash ? chalk.dim(" [") + chalk.cyan(info.hash) + chalk.dim("]") : "";
+    console.log(chalk.green("\nGitClean workflow completed!") + hashTag);
+    console.log(chalk.dim(`  branch: ${info.branch}`) + (info.subject ? chalk.dim(`  ·  ${info.subject}`) : "") + "\n");
   } catch (error) {
     console.error(
       chalk.red("\nGitClean workflow failed:"),
@@ -227,5 +271,93 @@ export function getGitStatus(): string {
       getErrorMessage(error)
     );
     return "";
+  }
+}
+
+export interface ChangedFile {
+  path: string;
+  status: "modified" | "added" | "deleted" | "renamed" | "untracked";
+  staged: boolean;
+}
+
+export function getChangedFiles(): ChangedFile[] {
+  const output = getGitStatus();
+  const files: ChangedFile[] = [];
+
+  for (const line of output.split("\n")) {
+    if (!line.trim()) continue;
+
+    const x = line[0]; // staged status
+    const y = line[1]; // working tree status
+    let filePath = line.substring(3);
+
+    // Renames: "old-name -> new-name" — keep only the new name
+    if (filePath.includes(" -> ")) {
+      filePath = filePath.split(" -> ")[1];
+    }
+
+    const isUntracked = x === "?" && y === "?";
+    const isStaged = x !== " " && x !== "?";
+
+    let status: ChangedFile["status"] = "modified";
+    if (isUntracked) status = "untracked";
+    else if (x === "A") status = "added";
+    else if (x === "D" || y === "D") status = "deleted";
+    else if (x === "R") status = "renamed";
+
+    files.push({ path: filePath, status, staged: isStaged });
+  }
+
+  return files;
+}
+
+export function getDiffNumstat(): Map<string, { added: number; deleted: number }> {
+  const result = new Map<string, { added: number; deleted: number }>();
+  for (const cmd of ["git diff --numstat", "git diff --cached --numstat"]) {
+    try {
+      const output = execSync(cmd, { encoding: "utf8" }).trim();
+      for (const line of output.split("\n")) {
+        const parts = line.split("\t");
+        if (parts.length < 3) continue;
+        const added = parseInt(parts[0]);
+        const deleted = parseInt(parts[1]);
+        const file = parts[2];
+        if (!isNaN(added) && !isNaN(deleted) && file) {
+          const prev = result.get(file) ?? { added: 0, deleted: 0 };
+          result.set(file, { added: Math.max(prev.added, added), deleted: Math.max(prev.deleted, deleted) });
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  return result;
+}
+
+export function getRecentScopes(limit = 8): string[] {
+  try {
+    const log = execSync(`git log --pretty=format:%s -${limit * 5} --no-merges`, { encoding: "utf8" });
+    const scopes: string[] = [];
+    const seen = new Set<string>();
+    for (const line of log.split("\n")) {
+      const match = line.match(/^[A-Z]+\(([^)]+)\):/);
+      if (match && !seen.has(match[1])) {
+        seen.add(match[1]);
+        scopes.push(match[1]);
+        if (scopes.length >= limit) break;
+      }
+    }
+    return scopes;
+  } catch {
+    return [];
+  }
+}
+
+export function getLastCommitInfo(): { hash: string; branch: string; subject: string } {
+  try {
+    const hash = execSync("git log -1 --pretty=format:%h", { encoding: "utf8" }).trim();
+    const subject = execSync("git log -1 --pretty=format:%s", { encoding: "utf8" }).trim();
+    const branch = getCurrentBranch();
+    return { hash, branch, subject };
+  } catch {
+    return { hash: "", branch: "", subject: "" };
   }
 }

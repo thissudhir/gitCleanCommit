@@ -2,33 +2,41 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import chalk from "chalk";
+import { z } from "zod";
 
-export interface CommitTypeConfig {
-  name: string;
-  value: string;
-  color: keyof typeof chalk;
-  description: string;
-}
+const AI_PROVIDERS = ["gemini", "openai", "deepseek", "anthropic", "ollama", "groq", "custom"] as const;
 
-export interface GitCleanConfig {
-  commitTypes?: CommitTypeConfig[];
-  spellCheck?: {
-    enabled?: boolean;
-    debounceMs?: number;
-  };
-  prompts?: {
-    scope?: boolean;
-    body?: boolean;
-    breaking?: boolean;
-    issues?: boolean;
-  };
-  ai?: {
-    provider?: "gemini" | "openai" | "deepseek" | "anthropic" | "ollama" | "groq" | "custom";
-    model?: string;
-    apiKey?: string;
-    baseURL?: string;
-  };
-}
+const CommitTypeSchema = z.object({
+  name: z.string().min(1, "name must be non-empty"),
+  value: z.string().min(1, "value must be non-empty"),
+  color: z.string().min(1, "color must be a non-empty string (e.g. 'green', 'red')"),
+  description: z.string(),
+});
+
+const GitCleanConfigSchema = z.object({
+  commitTypes: z.array(CommitTypeSchema).optional(),
+  spellCheck: z.object({
+    enabled: z.boolean().optional(),
+    debounceMs: z.number().int().positive("debounceMs must be a positive integer").optional(),
+  }).optional(),
+  prompts: z.object({
+    scope: z.boolean().optional(),
+    body: z.boolean().optional(),
+    breaking: z.boolean().optional(),
+    issues: z.boolean().optional(),
+  }).optional(),
+  ai: z.object({
+    provider: z.enum(AI_PROVIDERS, {
+      error: `provider must be one of: ${AI_PROVIDERS.join(", ")}`,
+    }).optional(),
+    model: z.string().optional(),
+    apiKey: z.string().optional(),
+    baseURL: z.string().optional(),
+  }).optional(),
+});
+
+export type CommitTypeConfig = z.infer<typeof CommitTypeSchema>;
+export type GitCleanConfig = z.infer<typeof GitCleanConfigSchema>;
 
 const DEFAULT_COMMIT_TYPES: CommitTypeConfig[] = [
   {
@@ -84,6 +92,7 @@ const DEFAULT_CONFIG: GitCleanConfig = {
   ai: {
     provider: "gemini",
     model: "gemini-1.5-flash",
+    apiKey: ""
   },
 };
 
@@ -117,17 +126,26 @@ function loadConfigFromPath(configPath: string): GitCleanConfig | null {
     return null;
   }
 
+  let raw: unknown;
   try {
-    const configContent = readFileSync(configPath, "utf-8");
-    return JSON.parse(stripComments(configContent));
-  } catch (error) {
-    console.warn(
-      chalk.yellow(
-        `Warning: Could not parse config at ${configPath}. Skipping.`
-      )
-    );
+    raw = JSON.parse(stripComments(readFileSync(configPath, "utf-8")));
+  } catch {
+    console.warn(chalk.yellow(`Warning: Could not parse JSON in ${configPath}. Skipping.`));
     return null;
   }
+
+  const result = GitCleanConfigSchema.safeParse(raw);
+  if (!result.success) {
+    console.warn(chalk.yellow(`\nWarning: Invalid config at ${configPath}:`));
+    for (const issue of result.error.issues) {
+      const field = issue.path.length > 0 ? issue.path.join(".") : "root";
+      console.warn(chalk.dim(`  • ${field}: ${issue.message}`));
+    }
+    console.warn(chalk.dim("  Falling back to defaults for this config file.\n"));
+    return null;
+  }
+
+  return result.data;
 }
 
 
@@ -149,9 +167,9 @@ function mergeConfigs(base: GitCleanConfig, override: GitCleanConfig): GitCleanC
     },
     ai: {
       provider: finalProvider as "gemini" | "openai" | "deepseek" | "anthropic" | "ollama" | "groq" | "custom",
-      model:    override.ai?.model   ?? (sameProvider ? base.ai?.model   : undefined),
-      apiKey:   override.ai?.apiKey  ?? (sameProvider ? base.ai?.apiKey  : undefined),
-      baseURL:  override.ai?.baseURL ?? (sameProvider ? base.ai?.baseURL : undefined),
+      model: override.ai?.model ?? (sameProvider ? base.ai?.model : undefined),
+      apiKey: override.ai?.apiKey ?? (sameProvider ? base.ai?.apiKey : undefined),
+      baseURL: override.ai?.baseURL ?? (sameProvider ? base.ai?.baseURL : undefined),
     },
   };
 }
@@ -187,7 +205,7 @@ export function getCommitTypes(): Array<{
   const commitTypes = config.commitTypes || DEFAULT_COMMIT_TYPES;
 
   return commitTypes.map((type) => ({
-    name: `${(chalk[type.color] as (text: string) => string)(type.value.padEnd(12))} - ${type.description}`,
+    name: `${((chalk as any)[type.color] as (text: string) => string)(type.value.padEnd(12))} - ${type.description}`,
     value: type.value,
     short: type.value,
   }));
@@ -297,7 +315,9 @@ export function updateAiConfig(
   let existing: GitCleanConfig = {};
   if (existsSync(configPath)) {
     try {
-      existing = JSON.parse(readFileSync(configPath, "utf-8"));
+      const raw = JSON.parse(stripComments(readFileSync(configPath, "utf-8")));
+      const result = GitCleanConfigSchema.safeParse(raw);
+      existing = result.success ? result.data : {};
     } catch {
       existing = {};
     }

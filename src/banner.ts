@@ -1,29 +1,28 @@
 import figlet from "figlet";
 import chalk from "chalk";
 
-export function showBanner(): void {
-  // Get terminal width, default to 80 if not available
+export function showBanner(mode?: "ai"): void {
   const terminalWidth = process.stdout.columns || 80;
-  
-  // Generate the full banner text to measure its width
-  const fullBanner = figlet.textSync("GitClean", {
+
+  const fullText = mode === "ai" ? "GitClean AI" : "GitClean";
+  const shortText = mode === "ai" ? "GC AI" : "GC";
+  const subtitle = mode === "ai"
+    ? chalk.cyan("AI-powered conventional commits\n")
+    : chalk.dim("Clean, conventional commits made easy\n");
+
+  const fullBanner = figlet.textSync(fullText, {
     font: "ANSI Shadow",
     horizontalLayout: "default",
     verticalLayout: "default",
   });
-  
-  // Calculate the actual width of the banner
-  const bannerLines = fullBanner.split("\n");
-  const bannerWidth = Math.max(...bannerLines.map(line => line.length));
-  
-  // Add a small safety margin (2 chars on each side)
+
+  const bannerWidth = Math.max(...fullBanner.split("\n").map(line => line.length));
   const safetyMargin = 4;
-  
-  // Show smaller "GC" banner if terminal is too narrow for the full banner
+
   if (terminalWidth < (bannerWidth + safetyMargin)) {
     console.log(
       chalk.whiteBright(
-        figlet.textSync("GC", {
+        figlet.textSync(shortText, {
           font: "ANSI Shadow",
           horizontalLayout: "default",
           verticalLayout: "default",
@@ -33,5 +32,5 @@ export function showBanner(): void {
   } else {
     console.log(chalk.whiteBright(fullBanner));
   }
-  console.log(chalk.dim("Clean, conventional commits made easy\n"));
+  console.log(subtitle);
 }

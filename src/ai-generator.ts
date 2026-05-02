@@ -4,10 +4,31 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import Anthropic from "@anthropic-ai/sdk";
 import { loadConfig } from "./config.js";
 import chalk from "chalk";
-import ora from "ora";
+import ora, { type Ora } from "ora";
 
-// Truncate large diffs to avoid hitting token limits
 const MAX_DIFF_LENGTH = 8000;
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAYS_MS = [1000, 2000]; // waits between attempts 1→2 and 2→3
+
+function isRetryableError(error: unknown): boolean {
+  if (error && typeof error === "object") {
+    const status = (error as any).status ?? (error as any).statusCode;
+    if (status === 429 || (status >= 500 && status < 600)) return true;
+    if (status === 400 || status === 401 || status === 403 || status === 404) return false;
+  }
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes("rate limit") || msg.includes("429")) return true;
+    if (msg.includes("timeout") || msg.includes("etimedout") || msg.includes("econnreset")) return true;
+    if (msg.includes("econnrefused")) return true;
+    if (msg.includes("unauthorized") || msg.includes("forbidden") || msg.includes("invalid api key")) return false;
+  }
+  return true;
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 interface GitContext {
   branch: string;
@@ -41,14 +62,14 @@ export class AiGenerator {
     );
   }
 
-  public static async generateCommitMessage(): Promise<string> {
+  public static async generateCommitMessage(files: string[] = ["."], hint?: string): Promise<string> {
     const config = loadConfig();
 
-    // Auto-stage all changes
     try {
-      execSync("git add .", { stdio: "ignore" });
+      const args = ["add", "--", ...files];
+      execSync(`git ${args.join(" ")}`, { stdio: "ignore" });
     } catch {
-      // Ignore — not in a git repo or nothing to add
+      // not in a git repo or nothing to add
     }
 
     const diff = await this.getStagedDiff();
@@ -58,11 +79,9 @@ export class AiGenerator {
 
     const providerFromEnv = process.env.GITCLEAN_AI_PROVIDER as string | undefined;
     const provider = providerFromEnv || config.ai?.provider || "gemini";
-    // If provider is overridden via env, the config model belongs to a different provider — ignore it
     const model = process.env.GITCLEAN_AI_MODEL || (providerFromEnv ? undefined : config.ai?.model);
     const apiKey = config.ai?.apiKey || this.getApiKeyFromEnv(provider);
 
-    // Ollama runs locally — no API key required
     if (!apiKey && provider !== "ollama") {
       const envVar = this.getEnvVarName(provider);
       throw new Error(
@@ -75,22 +94,20 @@ export class AiGenerator {
 
     try {
       const context = this.getGitContext();
-      const truncatedDiff = this.truncateDiff(diff);
-      let message = "";
+      const prompt = this.buildPrompt(this.truncateDiff(diff), context, hint);
 
-      if (provider === "gemini") {
-        message = await this.generateWithGemini(
-          truncatedDiff, apiKey!, model || "gemini-1.5-flash", context
-        );
-      } else if (provider === "anthropic") {
-        message = await this.generateWithAnthropic(
-          truncatedDiff, apiKey!, model || "claude-3-5-haiku-20241022", context
-        );
-      } else {
-        message = await this.generateWithOpenAICompatible(
-          truncatedDiff, apiKey || "ollama", provider, model, config.ai?.baseURL, context
-        );
-      }
+      const message = await this.withRetry(
+        () => {
+          if (provider === "gemini") {
+            return this.generateWithGemini(prompt, apiKey!, model || "gemini-1.5-flash");
+          } else if (provider === "anthropic") {
+            return this.generateWithAnthropic(prompt, apiKey!, model || "claude-3-5-haiku-20241022");
+          } else {
+            return this.generateWithOpenAICompatible(prompt, apiKey || "ollama", provider, model, config.ai?.baseURL);
+          }
+        },
+        spinner
+      );
 
       spinner.succeed("AI generation successful!");
       return message.trim().replace(/^['"`]|['"`]$/g, "");
@@ -101,6 +118,29 @@ export class AiGenerator {
       }
       throw error;
     }
+  }
+
+  private static async withRetry<T>(
+    operation: () => Promise<T>,
+    spinner: Ora
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        const isLast = attempt === MAX_RETRY_ATTEMPTS;
+        if (isLast || !isRetryableError(error)) throw error;
+
+        const delayMs = RETRY_DELAYS_MS[attempt - 1];
+        const delaySec = delayMs / 1000;
+        spinner.text = chalk.yellow(
+          `Attempt ${attempt} failed — retrying in ${delaySec}s (${attempt + 1}/${MAX_RETRY_ATTEMPTS})...`
+        );
+        await sleep(delayMs);
+        spinner.text = chalk.blue(`Retrying with AI provider (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS})...`);
+      }
+    }
+    throw new Error("Unreachable");
   }
 
   private static getApiKeyFromEnv(provider: string): string | undefined {
@@ -126,16 +166,17 @@ export class AiGenerator {
     }
   }
 
-  private static buildPrompt(diff: string, context: GitContext): string {
+  private static buildPrompt(diff: string, context: GitContext, hint?: string): string {
     const contextSection = context.recentCommits
       ? `\nBranch: ${context.branch}\nRecent commits (for style reference):\n${context.recentCommits}\n`
       : `\nBranch: ${context.branch}\n`;
+    const hintSection = hint ? `\nAdditional focus: ${hint}\n` : "";
 
     return `Generate a clean, conventional commit message for the following git diff.
 ${contextSection}
 Git Diff:
 ${diff}
-
+${hintSection}
 Format: <TYPE>(<SCOPE>): <MESSAGE>
 Available Types: ADD, FIX, UPDATE, DOCS, TEST, REMOVE
 
@@ -148,66 +189,55 @@ Instructions:
   }
 
   private static async generateWithGemini(
-    diff: string,
+    prompt: string,
     apiKey: string,
-    modelName: string,
-    context: GitContext
+    modelName: string
   ): Promise<string> {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: modelName });
-    const result = await model.generateContent(this.buildPrompt(diff, context));
+    const result = await model.generateContent(prompt);
     return result.response.text();
   }
 
   private static async generateWithAnthropic(
-    diff: string,
+    prompt: string,
     apiKey: string,
-    modelName: string,
-    context: GitContext
+    modelName: string
   ): Promise<string> {
     const client = new Anthropic({ apiKey });
     const message = await client.messages.create({
       model: modelName,
       max_tokens: 256,
       system: "You are a professional developer assistant. You generate clean, conventional commit messages. Output only the commit message string — no explanations, no markdown.",
-      messages: [{ role: "user", content: this.buildPrompt(diff, context) }],
+      messages: [{ role: "user", content: prompt }],
     });
     const block = message.content[0];
     return block.type === "text" ? block.text : "";
   }
 
   private static async generateWithOpenAICompatible(
-    diff: string,
+    prompt: string,
     apiKey: string,
     provider: string,
     modelName?: string,
-    baseURL?: string,
-    context: GitContext = { branch: "unknown", recentCommits: "" }
+    baseURL?: string
   ): Promise<string> {
-    // Presets for common providers — all use OpenAI-compatible APIs
     const presets: Record<string, { model: string; baseURL: string }> = {
-      openai:   { model: "gpt-4o-mini",              baseURL: "https://api.openai.com/v1" },
-      deepseek: { model: "deepseek-chat",             baseURL: "https://api.deepseek.com" },
-      groq:     { model: "llama-3.1-8b-instant",      baseURL: "https://api.groq.com/openai/v1" },
-      ollama:   { model: "llama3.2",                  baseURL: "http://localhost:11434/v1" },
-      custom:   { model: "gpt-4o-mini",               baseURL: "" },
+      openai:   { model: "gpt-4o-mini",         baseURL: "https://api.openai.com/v1" },
+      deepseek: { model: "deepseek-chat",        baseURL: "https://api.deepseek.com" },
+      groq:     { model: "llama-3.1-8b-instant", baseURL: "https://api.groq.com/openai/v1" },
+      ollama:   { model: "llama3.2",             baseURL: "http://localhost:11434/v1" },
+      custom:   { model: "gpt-4o-mini",          baseURL: "" },
     };
 
     const preset = presets[provider] || presets.custom;
-
-    const client = new OpenAI({
-      apiKey,
-      baseURL: baseURL || preset.baseURL || undefined,
-    });
+    const client = new OpenAI({ apiKey, baseURL: baseURL || preset.baseURL || undefined });
 
     const completion = await client.chat.completions.create({
       model: modelName || preset.model,
       messages: [
-        {
-          role: "system",
-          content: "You are a professional developer assistant. You generate clean, conventional commit messages. Output only the commit message string — no explanations, no markdown.",
-        },
-        { role: "user", content: this.buildPrompt(diff, context) },
+        { role: "system", content: "You are a professional developer assistant. You generate clean, conventional commit messages. Output only the commit message string — no explanations, no markdown." },
+        { role: "user", content: prompt },
       ],
       temperature: 0.2,
       max_tokens: 256,
