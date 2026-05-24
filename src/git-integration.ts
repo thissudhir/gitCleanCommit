@@ -1,4 +1,4 @@
-import { execSync, spawn } from "child_process";
+import { execSync, spawn, spawnSync } from "child_process";
 import { writeFileSync, readFileSync, existsSync, chmodSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
@@ -93,8 +93,10 @@ export async function removeGitHook(): Promise<void> {
 export function executeGitAdd(files: string[] = ["."]): void {
   const spinner = ora("Adding files...").start();
   try {
-    const args = ["add", ...files];
-    execSync(`git ${args.join(" ")}`, { stdio: "pipe" });
+    const result = spawnSync("git", ["add", "--", ...files], { stdio: "pipe" });
+    if (result.status !== 0) {
+      throw new Error(result.stderr?.toString().trim() || "git add failed");
+    }
     spinner.succeed(`Files added: ${files.join(", ")}`);
   } catch (error) {
     spinner.fail("Failed to add files");
