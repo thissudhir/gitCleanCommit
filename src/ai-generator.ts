@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { OpenAI } from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import Anthropic from "@anthropic-ai/sdk";
@@ -66,8 +66,7 @@ export class AiGenerator {
     const config = loadConfig();
 
     try {
-      const args = ["add", "--", ...files];
-      execSync(`git ${args.join(" ")}`, { stdio: "ignore" });
+      spawnSync("git", ["add", "--", ...files], { stdio: "ignore" });
     } catch {
       // not in a git repo or nothing to add
     }
@@ -110,7 +109,28 @@ export class AiGenerator {
       );
 
       spinner.succeed("AI generation successful!");
-      return message.trim().replace(/^['"`]|['"`]$/g, "");
+      const cleaned = message.trim().replace(/^['"`]|['"`]$/g, "");
+      const firstLine = cleaned.split("\n")[0].trim();
+      if (firstLine.length <= 72) return firstLine;
+
+      // Message is too long — ask the AI to shorten the specific message rather than truncating
+      spinner.start(chalk.yellow("Message too long — asking AI to shorten it..."));
+      const shortenPrompt = `Shorten this git commit message to under 65 characters while keeping the full meaning. Output only the shortened message, nothing else.\n\nOriginal: ${firstLine}`;
+      const shortened = await this.withRetry(
+        () => {
+          if (provider === "gemini") {
+            return this.generateWithGemini(shortenPrompt, apiKey!, model || "gemini-1.5-flash");
+          } else if (provider === "anthropic") {
+            return this.generateWithAnthropic(shortenPrompt, apiKey!, model || "claude-3-5-haiku-20241022");
+          } else {
+            return this.generateWithOpenAICompatible(shortenPrompt, apiKey || "ollama", provider, model, config.ai?.baseURL);
+          }
+        },
+        spinner
+      );
+      spinner.succeed("AI generation successful!");
+      const shortCleaned = shortened.trim().replace(/^['"`]|['"`]$/g, "").split("\n")[0].trim();
+      return shortCleaned.length <= 72 ? shortCleaned : shortCleaned.slice(0, shortCleaned.lastIndexOf(" ", 72) || 72);
     } catch (error) {
       spinner.fail("AI generation failed");
       if (error instanceof Error) {
@@ -167,9 +187,7 @@ export class AiGenerator {
   }
 
   private static buildPrompt(diff: string, context: GitContext, hint?: string): string {
-    const contextSection = context.recentCommits
-      ? `\nBranch: ${context.branch}\nRecent commits (for style reference):\n${context.recentCommits}\n`
-      : `\nBranch: ${context.branch}\n`;
+    const contextSection = `\nBranch: ${context.branch}\n`;
     const hintSection = hint ? `\nAdditional focus: ${hint}\n` : "";
 
     return `Generate a clean, conventional commit message for the following git diff.
@@ -183,8 +201,8 @@ Available Types: ADD, FIX, UPDATE, DOCS, TEST, REMOVE
 Instructions:
 1. Use ONLY the types listed above (all caps).
 2. Scope is optional but recommended — infer it from the changed files.
-3. Message should be present tense, concise, and descriptive.
-4. Match the style and tone of the recent commits shown above.
+3. Message must be present tense, concise, and descriptive.
+4. Output ONLY a single line under 65 characters — no body, no bullet points, no newlines.
 5. Output ONLY the commit message string, nothing else.`;
   }
 
@@ -194,7 +212,10 @@ Instructions:
     modelName: string
   ): Promise<string> {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: { temperature: 0.4, maxOutputTokens: 100 },
+    });
     const result = await model.generateContent(prompt);
     return result.response.text();
   }
@@ -207,7 +228,8 @@ Instructions:
     const client = new Anthropic({ apiKey });
     const message = await client.messages.create({
       model: modelName,
-      max_tokens: 256,
+      max_tokens: 100,
+      temperature: 0.4,
       system: "You are a professional developer assistant. You generate clean, conventional commit messages. Output only the commit message string — no explanations, no markdown.",
       messages: [{ role: "user", content: prompt }],
     });
@@ -239,8 +261,8 @@ Instructions:
         { role: "system", content: "You are a professional developer assistant. You generate clean, conventional commit messages. Output only the commit message string — no explanations, no markdown." },
         { role: "user", content: prompt },
       ],
-      temperature: 0.2,
-      max_tokens: 256,
+      temperature: 0.4,
+      max_tokens: 100,
     });
 
     return completion.choices[0].message.content || "";

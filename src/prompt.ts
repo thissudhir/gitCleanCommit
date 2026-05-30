@@ -1,4 +1,5 @@
 import inquirer from "inquirer";
+import readline from "readline";
 import chalk from "chalk";
 import { GitCleanSpellChecker, SpellCheckResult } from "./spellcheck.js";
 import {
@@ -50,6 +51,7 @@ class SpellCheckPrompt {
   private status: string;
   private done!: (value: string) => void;
   private keypressListener: any;
+  private escListener: ((chunk: Buffer) => void) | null = null;
   private spellCheckTimeout: NodeJS.Timeout | null = null;
   private previousLineCount: number = 1;
 
@@ -95,9 +97,10 @@ class SpellCheckPrompt {
         return;
       }
 
-      if (key.name === "escape") {
+      if (key.name === "escape" || (key.name === "c" && key.ctrl)) {
         this.cleanup();
-        process.exit(0);
+        handleEscapeKey();
+        return;
       }
 
       // Handle arrow key navigation
@@ -151,21 +154,33 @@ class SpellCheckPrompt {
       this.render();
     };
 
-    // Enable keypress events
+    // Ensure keypress events are active (inquirer may close its interface between prompts)
+    readline.emitKeypressEvents(process.stdin);
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(true);
     }
     process.stdin.resume();
+
+    // Instant ESC via data events — fires before readline's ~500ms escape-sequence timeout
+    this.escListener = (chunk: Buffer) => {
+      if (chunk.length === 1 && chunk[0] === 0x1b) {
+        this.cleanup();
+        handleEscapeKey();
+      }
+    };
+    process.stdin.on("data", this.escListener);
     process.stdin.on("keypress", this.keypressListener);
   }
 
   private cleanup(): void {
-    // Clear any pending spell check timeout
     if (this.spellCheckTimeout) {
       clearTimeout(this.spellCheckTimeout);
       this.spellCheckTimeout = null;
     }
-
+    if (this.escListener) {
+      process.stdin.removeListener("data", this.escListener);
+      this.escListener = null;
+    }
     if (this.keypressListener) {
       process.stdin.removeListener("keypress", this.keypressListener);
       this.keypressListener = null;
@@ -208,69 +223,47 @@ class SpellCheckPrompt {
   private render(): void {
     if (this.status === "answered") return;
 
-    // First, move cursor back to the start of the first line of our previous render
-    // We need to move up (previousLineCount - 1) lines
+    const terminalWidth = process.stdout.columns || 80;
+    const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
+
+    // Return to the start of our render area and wipe everything below
     if (this.previousLineCount > 1) {
-      process.stdout.write(`\x1b[${this.previousLineCount - 1}A`);
+      process.stdout.moveCursor(0, -(this.previousLineCount - 1));
     }
+    process.stdout.cursorTo(0);
+    process.stdout.clearScreenDown();
 
-    // Now clear all lines from the previous render
-    for (let i = 0; i < this.previousLineCount; i++) {
-      process.stdout.write("\r\x1b[K"); // Clear current line
-      if (i < this.previousLineCount - 1) {
-        process.stdout.write("\n"); // Move to next line
-      }
-    }
-
-    // Move cursor back to the start
-    if (this.previousLineCount > 1) {
-      process.stdout.write(`\x1b[${this.previousLineCount - 1}A`);
-    }
-    process.stdout.write("\r");
-
-    // Show question
+    // Write prompt prefix + text (with spell-error highlights)
     const questionText = this.question.message;
     const promptPrefix = `${chalk.cyan("?")} ${chalk.bold(questionText)} `;
     process.stdout.write(promptPrefix);
+    process.stdout.write(this.createDisplayText());
 
-    // Show text with spell checking
-    const displayText = this.createDisplayText();
-    process.stdout.write(displayText);
-
-    // Live character counter (shown when charLimit is set on the question)
+    // Character counter
     const charLimit: number | undefined = (this.question as any).charLimit;
     let counterText = "";
     if (charLimit) {
       const len = this.currentText.length;
-      const counterColor = len > charLimit ? chalk.red : len > Math.floor(charLimit * 0.8) ? chalk.yellow : chalk.dim;
-      counterText = counterColor(` ${len}/${charLimit}`);
+      const color = len > charLimit ? chalk.red : len > Math.floor(charLimit * 0.8) ? chalk.yellow : chalk.dim;
+      counterText = color(` ${len}/${charLimit}`);
       process.stdout.write(counterText);
     }
 
-    // Calculate line count for next render — include counter in total width
-    const terminalWidth = process.stdout.columns || 80;
-    const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, '');
-    const promptLength = stripAnsi(promptPrefix).length;
-    const textLength = this.currentText.length;
-    const counterLength = stripAnsi(counterText).length;
-    this.previousLineCount = Math.max(1, Math.ceil((promptLength + textLength + counterLength) / terminalWidth));
+    // Track how many terminal lines we occupied so the next render can clear them
+    const promptLen = stripAnsi(promptPrefix).length;
+    const totalLen = promptLen + this.currentText.length + stripAnsi(counterText).length;
+    this.previousLineCount = Math.max(1, Math.ceil(totalLen / terminalWidth));
 
-    // Cursor positioning — counter sits after the text, so endAbsolutePosition includes it
-    const cursorAbsolutePosition = promptLength + this.cursorPosition;
-    const endAbsolutePosition = promptLength + textLength + counterLength;
-
-    const cursorLine = Math.floor(cursorAbsolutePosition / terminalWidth);
-    const endLine = Math.floor(endAbsolutePosition / terminalWidth);
-    const cursorColumn = cursorAbsolutePosition % terminalWidth;
-    const endColumn = endAbsolutePosition % terminalWidth;
+    // Move the visible cursor to the logical text-cursor position
+    const endLine   = Math.floor(totalLen / terminalWidth);
+    const cursorAbs = promptLen + this.cursorPosition;
+    const cursorLine = Math.floor(cursorAbs / terminalWidth);
+    const cursorCol  = cursorAbs % terminalWidth;
 
     if (endLine > cursorLine) {
-      const linesToMoveUp = endLine - cursorLine;
-      process.stdout.write(`\x1b[${linesToMoveUp}A`);
-      if (cursorColumn > 0) process.stdout.write(`\x1b[${cursorColumn}C`);
-    } else if (endColumn > cursorColumn) {
-      process.stdout.write(`\x1b[${endColumn - cursorColumn}D`);
+      process.stdout.moveCursor(0, -(endLine - cursorLine));
     }
+    process.stdout.cursorTo(cursorCol);
   }
 
   private createDisplayText(): string {
@@ -321,18 +314,16 @@ function handleEscapeKey(): void {
 }
 
 function setupEscapeHandler(): void {
+  // Use keypress events — safe alongside readline, unlike raw data listeners
+  readline.emitKeypressEvents(process.stdin);
   if (process.stdin.isTTY) {
     process.stdin.setRawMode(true);
-    process.stdin.resume();
-    process.stdin.setEncoding("utf8");
-
-    process.stdin.on("data", (key: Buffer | string) => {
-      const keyString = key.toString();
-      if (keyString === "\u001B" || keyString === "\u0003") {
-        handleEscapeKey();
-      }
-    });
   }
+  process.stdin.on("keypress", (_str: unknown, key: any) => {
+    if (key?.name === "escape") {
+      handleEscapeKey();
+    }
+  });
 }
 
 function formatCommitMessage(
@@ -362,6 +353,7 @@ function formatCommitMessage(
 }
 
 export async function runAiCommitFlow(hookFile?: string): Promise<void> {
+  if (!hookFile) setupEscapeHandler();
   try {
     const selectedFiles = hookFile ? ["."] : await promptFileSelection();
     if (!hookFile && selectedFiles.length === 0) {
@@ -370,15 +362,21 @@ export async function runAiCommitFlow(hookFile?: string): Promise<void> {
     }
 
     let message = await AiGenerator.generateCommitMessage(selectedFiles);
+    let messageSource: "ai" | "edited" = "ai";
 
     while (true) {
+      const boxTitle = messageSource === "ai" ? "AI Suggestion" : "Your Edit";
+      const msgLen = message.length;
+      const lenColor = msgLen > 72 ? chalk.red : msgLen > 58 ? chalk.yellow : chalk.dim;
+      const lenLabel = lenColor(`\n\n${msgLen}/72 chars`);
+      const borderColor = msgLen > 72 ? "red" : "green";
       console.log(
-        boxen(chalk.green("AI Generated Message:\n\n") + chalk.white(message), {
+        boxen(chalk.green("Commit Message:\n\n") + chalk.white(message) + lenLabel, {
           padding: 0.5,
           margin: 0.5,
-          borderColor: "green",
+          borderColor,
           borderStyle: "round",
-          title: "AI Suggestion",
+          title: boxTitle,
           titleAlignment: "center",
         })
       );
@@ -416,8 +414,10 @@ export async function runAiCommitFlow(hookFile?: string): Promise<void> {
           filter: (v: string) => v.trim(),
         } as any]);
         message = edited;
+        messageSource = "edited";
       } else if (action === "regenerate") {
         message = await AiGenerator.generateCommitMessage(selectedFiles);
+        messageSource = "ai";
       } else if (action === "regenerate_hint") {
         const { hint } = await inquirer.prompt([{
           name: "hint",
@@ -426,6 +426,7 @@ export async function runAiCommitFlow(hookFile?: string): Promise<void> {
           validate: (v: string) => v.trim().length > 0 || "Enter a hint",
         }]);
         message = await AiGenerator.generateCommitMessage(selectedFiles, hint.trim());
+        messageSource = "ai";
       } else {
         console.log(
           boxen(chalk.yellow("Operation cancelled"), {
@@ -487,8 +488,7 @@ async function promptFileSelection(): Promise<string[]> {
 }
 
 export async function promptCommit(hookFile?: string, amend = false): Promise<void> {
-  setupEscapeHandler();
-
+  if (!amend) setupEscapeHandler();
   await GitCleanSpellChecker.initialize();
 
   const config = loadConfig();
