@@ -54,7 +54,15 @@ export async function setupGitHook(): Promise<void> {
   const hooksDir = join(gitRoot, ".git", "hooks");
   const commitMsgHook = join(hooksDir, "prepare-commit-msg");
 
-  // Create the hook script
+  // Resolve the absolute path to gitclean at install time so the hook works
+  // in environments where the npm global bin directory isn't in PATH (e.g. IDEs).
+  let gitcleanBin = "gitclean";
+  try {
+    gitcleanBin = execSync("which gitclean", { encoding: "utf8" }).trim();
+  } catch {
+    // Fall back to bare name; will work if shell PATH is set up correctly
+  }
+
   const hookScript = `#!/bin/sh
 # GitClean prepare-commit-msg hook
 # This hook is installed by gitclean CLI tool
@@ -62,12 +70,14 @@ export async function setupGitHook(): Promise<void> {
 COMMIT_MSG_FILE=$1
 COMMIT_SOURCE=$2
 
-# Only run for regular commits (not merge, squash, etc.)
-if [ -z "$COMMIT_SOURCE" ] || [ "$COMMIT_SOURCE" = "message" ]; then
-  # Check if this is an empty commit message
-  if [ ! -s "$COMMIT_MSG_FILE" ] || grep -q "^#" "$COMMIT_MSG_FILE"; then
-    # Run gitclean in interactive mode and pass the commit message file
-    gitclean commit --hook "$COMMIT_MSG_FILE"
+# Only intercept plain "git commit" with no pre-filled message.
+# COMMIT_SOURCE is empty for a bare commit; it is "message" when -m is used,
+# "merge" for merges, "squash" for squashes, etc. — skip all of those.
+if [ -z "$COMMIT_SOURCE" ]; then
+  # Run only when the file has no real content (just git status comments or empty)
+  if ! grep -qE "^[^#]" "$COMMIT_MSG_FILE" 2>/dev/null; then
+    "${gitcleanBin}" commit --hook "$COMMIT_MSG_FILE"
+    exit $?
   fi
 fi
 `;
@@ -106,26 +116,27 @@ export function executeGitAdd(files: string[] = ["."]): void {
 
 export function executeGitCommit(message: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const spinner = ora("Creating commit...").start();
+    const spinner = ora("Running pre-commit hooks...").start();
 
     try {
-      // Split the message by double newlines to get separate paragraphs
-      // Each paragraph becomes a separate -m argument for proper formatting
       const messageParts = message.split("\n\n").filter((part) => part.trim());
-
       const args = ["commit"];
       messageParts.forEach((part) => {
         args.push("-m", part.trim());
       });
 
-      const result = spawn("git", args, { stdio: "pipe" });
+      // Stop spinner before spawning so pre-commit hook output is visible
+      // and interactive hooks (lint-staged etc.) can receive input.
+      spinner.stop();
+
+      const result = spawn("git", args, { stdio: "inherit" });
 
       result.on("close", (code) => {
         if (code === 0) {
           spinner.succeed("Commit created successfully!");
           resolve();
         } else {
-          spinner.fail("Commit failed");
+          spinner.fail("Commit failed (pre-commit hook may have rejected it)");
           reject(new Error("Commit failed"));
         }
       });
@@ -149,7 +160,8 @@ export function executeGitAmend(message: string): Promise<void> {
       const args = ["commit", "--amend"];
       messageParts.forEach((part) => args.push("-m", part.trim()));
 
-      const result = spawn("git", args, { stdio: "pipe" });
+      spinner.stop();
+      const result = spawn("git", args, { stdio: "inherit" });
       result.on("close", (code) => {
         if (code === 0) {
           const info = getLastCommitInfo();

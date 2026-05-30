@@ -295,6 +295,8 @@ class SpellCheckPrompt {
 // Register custom prompt type with proper typing
 inquirer.registerPrompt("spellcheck", SpellCheckPrompt as any);
 
+let _hookMode = false;
+
 function handleEscapeKey(): void {
   const exitBox = boxen(
     chalk.yellow("Operation cancelled by user (ESC pressed)") +
@@ -310,7 +312,9 @@ function handleEscapeKey(): void {
     }
   );
   console.log(exitBox);
-  process.exit(0);
+  // In hook mode exit 1 so git aborts cleanly instead of proceeding with an
+  // empty commit message file and showing a confusing git error.
+  process.exit(_hookMode ? 1 : 0);
 }
 
 function setupEscapeHandler(): void {
@@ -353,6 +357,7 @@ function formatCommitMessage(
 }
 
 export async function runAiCommitFlow(hookFile?: string): Promise<void> {
+  if (hookFile) _hookMode = true;
   if (!hookFile) setupEscapeHandler();
   try {
     const selectedFiles = hookFile ? ["."] : await promptFileSelection();
@@ -488,6 +493,7 @@ async function promptFileSelection(): Promise<string[]> {
 }
 
 export async function promptCommit(hookFile?: string, amend = false): Promise<void> {
+  if (hookFile) _hookMode = true;
   if (!amend) setupEscapeHandler();
   await GitCleanSpellChecker.initialize();
 
