@@ -91,7 +91,7 @@ const DEFAULT_CONFIG: GitCleanConfig = {
   },
   ai: {
     provider: "gemini",
-    model: "gemini-1.5-flash",
+    model: "gemini-2.0-flash",
     apiKey: ""
   },
 };
@@ -281,7 +281,7 @@ const DEFAULT_CONFIG_TEMPLATE = `
   },
   "ai": {
     "provider": "gemini",
-    "model": "gemini-1.5-flash",
+    "model": "gemini-2.0-flash",
     "apiKey": ""                // paste your key here, or set the env var (e.g. GEMINI_API_KEY)
   }
 }

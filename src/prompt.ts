@@ -4,6 +4,7 @@ import chalk from "chalk";
 import { GitCleanSpellChecker, SpellCheckResult } from "./spellcheck.js";
 import {
   executeFullGitWorkflow,
+  executeGitAdd,
   executeGitAmend,
   getChangedFiles,
   getDiffNumstat,
@@ -27,14 +28,13 @@ function parseConventionalCommit(msg: string): { type: string; scope: string; me
   return { type: match[1], scope: match[2] ?? "", message: match[3] };
 }
 
+// ─── Spell-check prompt ───────────────────────────────────────────────────────
 
-// Custom inquirer prompt with real-time spell checking
 class SpellCheckPrompt {
   constructor(question: any, readLine: any, answers: any) {
     this.question = question;
     this.rl = readLine;
     this.answers = answers;
-    // Pre-fill with the default value (e.g. from AI-generated message)
     this.currentText = question.default ?? "";
     this.cursorPosition = this.currentText.length;
     this.spellErrors = [];
@@ -56,7 +56,7 @@ class SpellCheckPrompt {
   private previousLineCount: number = 1;
 
   run(): Promise<string> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       this.done = resolve;
       this.render();
       this.setupKeyHandlers();
@@ -64,15 +64,11 @@ class SpellCheckPrompt {
   }
 
   private setupKeyHandlers(): void {
-    // Store the keypress listener so we can remove it later
     this.keypressListener = async (str: string, key: any) => {
       if (!key) return;
 
       if (key.name === "return" || key.name === "enter") {
         this.cleanup();
-        // process.stdout.write("\n");
-
-        // Validation
         if (this.question.validate) {
           const validation = await this.question.validate(this.currentText);
           if (validation !== true) {
@@ -85,13 +81,10 @@ class SpellCheckPrompt {
             return;
           }
         }
-
-        // Filter
         let result = this.currentText;
         if (this.question.filter) {
           result = await this.question.filter(this.currentText);
         }
-
         this.status = "answered";
         this.done(result);
         return;
@@ -103,37 +96,35 @@ class SpellCheckPrompt {
         return;
       }
 
-      // Handle arrow key navigation
+      // Tab: apply the top suggestion for the word at cursor
+      if (key.name === "tab") {
+        const err = this.spellErrors.find(
+          e => this.cursorPosition > e.position.start && this.cursorPosition <= e.position.end
+        );
+        if (err?.suggestions.length) {
+          const fix = err.suggestions[0];
+          this.currentText =
+            this.currentText.slice(0, err.position.start) +
+            fix +
+            this.currentText.slice(err.position.end);
+          this.cursorPosition = err.position.start + fix.length;
+          await this.performSpellCheck();
+        }
+        this.render();
+        return;
+      }
+
       if (key.name === "left") {
-        if (this.cursorPosition > 0) {
-          this.cursorPosition--;
-          this.render();
-        }
+        if (this.cursorPosition > 0) { this.cursorPosition--; this.render(); }
         return;
       }
-
       if (key.name === "right") {
-        if (this.cursorPosition < this.currentText.length) {
-          this.cursorPosition++;
-          this.render();
-        }
+        if (this.cursorPosition < this.currentText.length) { this.cursorPosition++; this.render(); }
         return;
       }
+      if (key.name === "home") { this.cursorPosition = 0; this.render(); return; }
+      if (key.name === "end") { this.cursorPosition = this.currentText.length; this.render(); return; }
 
-      // Handle home/end keys
-      if (key.name === "home") {
-        this.cursorPosition = 0;
-        this.render();
-        return;
-      }
-
-      if (key.name === "end") {
-        this.cursorPosition = this.currentText.length;
-        this.render();
-        return;
-      }
-
-      // Handle text input
       if (key.name === "backspace") {
         if (this.cursorPosition > 0) {
           this.currentText =
@@ -142,7 +133,6 @@ class SpellCheckPrompt {
           this.cursorPosition--;
         }
       } else if (str && str.length === 1 && !key.ctrl && !key.meta) {
-        // Insert character at cursor position
         this.currentText =
           this.currentText.slice(0, this.cursorPosition) +
           str +
@@ -154,14 +144,10 @@ class SpellCheckPrompt {
       this.render();
     };
 
-    // Ensure keypress events are active (inquirer may close its interface between prompts)
     readline.emitKeypressEvents(process.stdin);
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
-    }
+    if (process.stdin.isTTY) process.stdin.setRawMode(true);
     process.stdin.resume();
 
-    // Instant ESC via data events — fires before readline's ~500ms escape-sequence timeout
     this.escListener = (chunk: Buffer) => {
       if (chunk.length === 1 && chunk[0] === 0x1b) {
         this.cleanup();
@@ -173,51 +159,23 @@ class SpellCheckPrompt {
   }
 
   private cleanup(): void {
-    if (this.spellCheckTimeout) {
-      clearTimeout(this.spellCheckTimeout);
-      this.spellCheckTimeout = null;
-    }
-    if (this.escListener) {
-      process.stdin.removeListener("data", this.escListener);
-      this.escListener = null;
-    }
-    if (this.keypressListener) {
-      process.stdin.removeListener("keypress", this.keypressListener);
-      this.keypressListener = null;
-    }
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(false);
-    }
+    if (this.spellCheckTimeout) { clearTimeout(this.spellCheckTimeout); this.spellCheckTimeout = null; }
+    if (this.escListener) { process.stdin.removeListener("data", this.escListener); this.escListener = null; }
+    if (this.keypressListener) { process.stdin.removeListener("keypress", this.keypressListener); this.keypressListener = null; }
+    if (process.stdin.isTTY) process.stdin.setRawMode(false);
   }
 
   private async performSpellCheck(): Promise<void> {
-    // Clear any existing timeout to prevent lag
-    if (this.spellCheckTimeout) {
-      clearTimeout(this.spellCheckTimeout);
-      this.spellCheckTimeout = null;
-    }
-
-    // Immediately clear errors if text is empty - no debounce needed
-    if (this.currentText.length === 0) {
-      this.spellErrors = [];
-      return;
-    }
-
-    // Debounce spell checking for better performance
+    if (this.spellCheckTimeout) { clearTimeout(this.spellCheckTimeout); this.spellCheckTimeout = null; }
+    if (this.currentText.length === 0) { this.spellErrors = []; return; }
     this.spellCheckTimeout = setTimeout(async () => {
       try {
-        this.spellErrors = await GitCleanSpellChecker.checkSpelling(
-          this.currentText
-        );
-        // Only render if we're still in pending status (not answered yet)
-        if (this.status === "pending") {
-          this.render();
-        }
-      } catch (error) {
-        // Silent error handling for spell check
+        this.spellErrors = await GitCleanSpellChecker.checkSpelling(this.currentText);
+        if (this.status === "pending") this.render();
+      } catch {
         this.spellErrors = [];
       }
-    }, 150); // Reduced from 200ms to 150ms for better responsiveness
+    }, 150);
   }
 
   private render(): void {
@@ -226,109 +184,98 @@ class SpellCheckPrompt {
     const terminalWidth = process.stdout.columns || 80;
     const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
 
-    // Return to the start of our render area and wipe everything below
-    if (this.previousLineCount > 1) {
-      process.stdout.moveCursor(0, -(this.previousLineCount - 1));
-    }
+    if (this.previousLineCount > 1) process.stdout.moveCursor(0, -(this.previousLineCount - 1));
     process.stdout.cursorTo(0);
     process.stdout.clearScreenDown();
 
-    // Write prompt prefix + text (with spell-error highlights)
     const questionText = this.question.message;
     const promptPrefix = `${chalk.cyan("?")} ${chalk.bold(questionText)} `;
     process.stdout.write(promptPrefix);
     process.stdout.write(this.createDisplayText());
 
-    // Character counter
+    // Character counter — show "N left" when within 15 chars of limit for quicker scanning
     const charLimit: number | undefined = (this.question as any).charLimit;
     let counterText = "";
     if (charLimit) {
       const len = this.currentText.length;
-      const color = len > charLimit ? chalk.red : len > Math.floor(charLimit * 0.8) ? chalk.yellow : chalk.dim;
-      counterText = color(` ${len}/${charLimit}`);
-      process.stdout.write(counterText);
+      const remaining = charLimit - len;
+      if (remaining < 0) {
+        counterText = chalk.red(` ${Math.abs(remaining)} over`);
+      } else if (remaining <= 15) {
+        counterText = chalk.yellow(` ${remaining} left`);
+      } else {
+        counterText = chalk.dim(` ${len}/${charLimit}`);
+      }
     }
+    process.stdout.write(counterText);
 
-    // Track how many terminal lines we occupied so the next render can clear them
+    // Tab suggestion hint — on its own line to avoid pushing the counter off-screen
+    const errAtCursor = this.spellErrors.find(
+      e => this.cursorPosition > e.position.start && this.cursorPosition <= e.position.end
+    );
+    const tabHint = errAtCursor?.suggestions[0]
+      ? chalk.dim(`  ⇥ ${errAtCursor.suggestions[0]}`)
+      : "";
+
+    if (tabHint) process.stdout.write("\n" + tabHint);
+
     const promptLen = stripAnsi(promptPrefix).length;
-    const totalLen = promptLen + this.currentText.length + stripAnsi(counterText).length;
-    this.previousLineCount = Math.max(1, Math.ceil(totalLen / terminalWidth));
+    const firstLineLen = promptLen + this.currentText.length + stripAnsi(counterText).length;
+    const firstLineRows = Math.max(1, Math.ceil(firstLineLen / terminalWidth));
+    const hintRows = tabHint ? 1 : 0;
+    this.previousLineCount = firstLineRows + hintRows;
 
-    // Move the visible cursor to the logical text-cursor position
-    const endLine   = Math.floor(totalLen / terminalWidth);
+    const endAbsoluteRow = firstLineRows - 1 + hintRows;
     const cursorAbs = promptLen + this.cursorPosition;
     const cursorLine = Math.floor(cursorAbs / terminalWidth);
     const cursorCol  = cursorAbs % terminalWidth;
 
-    if (endLine > cursorLine) {
-      process.stdout.moveCursor(0, -(endLine - cursorLine));
-    }
+    const rowsToMoveUp = endAbsoluteRow - cursorLine;
+    if (rowsToMoveUp > 0) process.stdout.moveCursor(0, -rowsToMoveUp);
     process.stdout.cursorTo(cursorCol);
   }
 
   private createDisplayText(): string {
-    if (this.spellErrors.length === 0) {
-      return this.currentText;
-    }
-
+    if (this.spellErrors.length === 0) return this.currentText;
     let result = this.currentText;
-
-    // Sort errors by position (descending) to avoid index shifting
-    const sortedErrors = this.spellErrors.sort(
-      (a, b) => b.position.start - a.position.start
-    );
-
+    const sortedErrors = [...this.spellErrors].sort((a, b) => b.position.start - a.position.start);
     for (const error of sortedErrors) {
       const { word, position } = error;
-      const beforeWord = result.substring(0, position.start);
-      const afterWord = result.substring(position.end);
-
-      // Create red underlined text for misspelled words
-      const highlightedWord = chalk.red.underline(word);
-      result = beforeWord + highlightedWord + afterWord;
+      result =
+        result.substring(0, position.start) +
+        chalk.red.underline(word) +
+        result.substring(position.end);
     }
-
     return result;
   }
 }
 
-// Register custom prompt type with proper typing
 inquirer.registerPrompt("spellcheck", SpellCheckPrompt as any);
+
+// ─── Escape handling ──────────────────────────────────────────────────────────
 
 let _hookMode = false;
 
 function handleEscapeKey(): void {
-  const exitBox = boxen(
-    chalk.yellow("Operation cancelled by user (ESC pressed)") +
-    "\n\n" +
-    chalk.dim("Run the command again when you're ready to commit."),
-    {
-      padding: 0.5,
-      margin: 1,
-      borderColor: "yellow",
-      borderStyle: "round",
-      title: "Operation Cancelled",
-      titleAlignment: "center",
-    }
+  console.log(
+    boxen(
+      chalk.yellow("Operation cancelled") + "\n\n" + chalk.dim("Run the command again when you're ready."),
+      { padding: 0.5, margin: 1, borderColor: "yellow", borderStyle: "round", title: "Cancelled", titleAlignment: "center" }
+    )
   );
-  console.log(exitBox);
-  // In hook mode exit 1 so git aborts cleanly instead of proceeding with an
-  // empty commit message file and showing a confusing git error.
+  // Exit 1 in hook mode so git aborts cleanly instead of proceeding with an empty message.
   process.exit(_hookMode ? 1 : 0);
 }
 
 function setupEscapeHandler(): void {
-  // Use keypress events — safe alongside readline, unlike raw data listeners
   readline.emitKeypressEvents(process.stdin);
-  if (process.stdin.isTTY) {
-    process.stdin.setRawMode(true);
-  }
+  if (process.stdin.isTTY) process.stdin.setRawMode(true);
   process.stdin.on("keypress", (_str: unknown, key: any) => {
-    if (key?.name === "escape") {
-      handleEscapeKey();
-    }
+    if (key?.name === "escape") handleEscapeKey();
   });
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatCommitMessage(
   type: CommitTypeConfig,
@@ -338,23 +285,89 @@ function formatCommitMessage(
   issues?: string
 ): string {
   let message = `${((chalk as any)[type.color] as (text: string) => string)(header)}`;
-
-  if (body) {
-    message += `\n\n${chalk.dim(body)}`;
-  }
-
-  if (breaking) {
-    message += `\n\n${chalk.redBright("BREAKING CHANGE:")} ${chalk.redBright(
-      header
-    )}`;
-  }
-
-  if (issues) {
-    message += `\n\n${chalk.blue(issues)}`;
-  }
-
+  if (body) message += `\n\n${chalk.dim(body)}`;
+  if (breaking) message += `\n\n${chalk.redBright("BREAKING CHANGE:")} ${chalk.redBright(header)}`;
+  if (issues) message += `\n\n${chalk.blue(issues)}`;
   return message;
 }
+
+const STATUS_LABEL: Record<string, string> = {
+  modified:  chalk.yellow("modified "),
+  added:     chalk.green("new file "),
+  deleted:   chalk.red("deleted  "),
+  renamed:   chalk.blue("renamed  "),
+  untracked: chalk.dim("untracked"),
+};
+
+async function promptFileSelection(): Promise<string[]> {
+  const files = getChangedFiles();
+  if (files.length === 0) return [];
+  const stats = getDiffNumstat();
+  const { selected } = await inquirer.prompt([
+    {
+      name: "selected",
+      type: "checkbox",
+      message: "Select files to stage:",
+      choices: files.map((f) => {
+        const stat = stats.get(f.path);
+        const statStr = stat
+          ? chalk.dim("  ") + chalk.green(`+${stat.added}`) + chalk.dim(" ") + chalk.red(`-${stat.deleted}`)
+          : "";
+        return {
+          name: `${STATUS_LABEL[f.status] ?? chalk.dim("unknown  ")}  ${f.path}${statStr}`,
+          value: f.path,
+          checked: f.staged,
+        };
+      }),
+      validate: (choices: string[]) => choices.length > 0 || "Select at least one file to stage.",
+    } as any,
+  ]);
+  return selected as string[];
+}
+
+// Scope selection: list of recent/branch scopes + custom entry option.
+async function promptScopeList(
+  stepLabel: string,
+  recentScopes: string[],
+  branchScope: string | null,
+  defaultScope?: string
+): Promise<string> {
+  const seen = new Set<string>();
+  const scopes: string[] = [];
+  for (const s of [defaultScope, branchScope, ...recentScopes]) {
+    if (s && !seen.has(s)) { seen.add(s); scopes.push(s); }
+  }
+
+  const choices: any[] = [
+    ...scopes.map(s => ({ name: chalk.cyan(s), value: s })),
+    ...(scopes.length > 0 ? [new inquirer.Separator()] : []),
+    { name: chalk.dim("(none)"), value: "" },
+    { name: chalk.green("+ type a custom scope"), value: "__custom__" },
+  ];
+
+  const { scopeChoice } = await inquirer.prompt([{
+    name: "scopeChoice",
+    type: "list",
+    message: stepLabel + "Scope (optional):",
+    choices,
+    default: defaultScope || branchScope || "",
+    theme: { helpMode: "never" },
+  }]);
+
+  if (scopeChoice === "__custom__") {
+    const { customScope } = await inquirer.prompt([{
+      name: "customScope",
+      type: "input",
+      message: chalk.dim("  ↳ ") + "Enter scope:",
+      filter: (v: string) => v.trim(),
+    }]);
+    return customScope;
+  }
+
+  return scopeChoice;
+}
+
+// ─── AI flow ──────────────────────────────────────────────────────────────────
 
 export async function runAiCommitFlow(hookFile?: string): Promise<void> {
   if (hookFile) _hookMode = true;
@@ -364,6 +377,12 @@ export async function runAiCommitFlow(hookFile?: string): Promise<void> {
     if (!hookFile && selectedFiles.length === 0) {
       console.log(chalk.yellow("No files selected. Aborting."));
       process.exit(0);
+    }
+
+    // Stage selected files so getStagedDiff() has content to work with.
+    // Skip in hook mode — the user already staged files before running git commit.
+    if (!hookFile) {
+      executeGitAdd(selectedFiles);
     }
 
     let message = await AiGenerator.generateCommitMessage(selectedFiles);
@@ -377,29 +396,23 @@ export async function runAiCommitFlow(hookFile?: string): Promise<void> {
       const borderColor = msgLen > 72 ? "red" : "green";
       console.log(
         boxen(chalk.green("Commit Message:\n\n") + chalk.white(message) + lenLabel, {
-          padding: 0.5,
-          margin: 0.5,
-          borderColor,
-          borderStyle: "round",
-          title: boxTitle,
-          titleAlignment: "center",
+          padding: 0.5, margin: 0.5, borderColor, borderStyle: "round",
+          title: boxTitle, titleAlignment: "center",
         })
       );
 
-      const { action } = await inquirer.prompt([
-        {
-          name: "action",
-          type: "list",
-          message: "What would you like to do?",
-          choices: [
-            { name: chalk.green("✔ Commit with this message"),  value: "commit" },
-            { name: chalk.blue("✎ Edit the message"),           value: "edit" },
-            { name: chalk.yellow("↺ Regenerate"),               value: "regenerate" },
-            { name: chalk.cyan("↺ Regenerate with hint..."),    value: "regenerate_hint" },
-            { name: chalk.red("✖ Cancel"),                      value: "cancel" },
-          ],
-        },
-      ]);
+      const { action } = await inquirer.prompt([{
+        name: "action",
+        type: "list",
+        message: "What would you like to do?",
+        choices: [
+          { name: chalk.green("✔ Commit with this message"),  value: "commit" },
+          { name: chalk.blue("✎ Edit the message"),           value: "edit" },
+          { name: chalk.yellow("↺ Regenerate"),               value: "regenerate" },
+          { name: chalk.cyan("↺ Regenerate with hint..."),    value: "regenerate_hint" },
+          { name: chalk.red("✖ Cancel"),                      value: "cancel" },
+        ],
+      }]);
 
       if (action === "commit") {
         if (hookFile) {
@@ -433,14 +446,9 @@ export async function runAiCommitFlow(hookFile?: string): Promise<void> {
         message = await AiGenerator.generateCommitMessage(selectedFiles, hint.trim());
         messageSource = "ai";
       } else {
-        console.log(
-          boxen(chalk.yellow("Operation cancelled"), {
-            padding: 0.5,
-            margin: 0.5,
-            borderColor: "yellow",
-            borderStyle: "round",
-          })
-        );
+        console.log(boxen(chalk.yellow("Operation cancelled"), {
+          padding: 0.5, margin: 0.5, borderColor: "yellow", borderStyle: "round",
+        }));
         process.exit(0);
       }
     }
@@ -454,65 +462,27 @@ export async function runAiCommitFlow(hookFile?: string): Promise<void> {
   }
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  modified:  chalk.yellow("modified "),
-  added:     chalk.green("new file "),
-  deleted:   chalk.red("deleted  "),
-  renamed:   chalk.blue("renamed  "),
-  untracked: chalk.dim("untracked"),
-};
-
-async function promptFileSelection(): Promise<string[]> {
-  const files = getChangedFiles();
-  if (files.length === 0) return [];
-
-  const stats = getDiffNumstat();
-
-  const { selected } = await inquirer.prompt([
-    {
-      name: "selected",
-      type: "checkbox",
-      message: "Select files to stage:",
-      choices: files.map((f) => {
-        const stat = stats.get(f.path);
-        const statStr = stat
-          ? chalk.dim("  ") + chalk.green(`+${stat.added}`) + chalk.dim(" ") + chalk.red(`-${stat.deleted}`)
-          : "";
-        return {
-          name: `${STATUS_LABEL[f.status] ?? chalk.dim("unknown  ")}  ${f.path}${statStr}`,
-          value: f.path,
-          checked: true,
-        };
-      }),
-      validate: (choices: string[]) =>
-        choices.length > 0 || "Select at least one file to stage.",
-    } as any,
-  ]);
-
-  return selected as string[];
-}
+// ─── Main commit prompt ───────────────────────────────────────────────────────
 
 export async function promptCommit(hookFile?: string, amend = false): Promise<void> {
   if (hookFile) _hookMode = true;
+
+  // Hook-mode header (banner is suppressed by caller for hook mode)
+  if (hookFile) {
+    console.log(chalk.bold("◆ gitclean") + chalk.dim("  triggered by git commit\n"));
+  }
+
   if (!amend) setupEscapeHandler();
+
   await GitCleanSpellChecker.initialize();
 
   const config = loadConfig();
-  const promptsConfig = config.prompts || {
-    scope: true,
-    body: false,
-    breaking: false,
-    issues: false,
-  };
-
-  // Parse last commit for amend pre-fill
+  const promptsConfig = config.prompts || { scope: true, body: false, breaking: false, issues: false };
   const lastCommit = amend ? parseConventionalCommit(getLastCommitMessage()) : null;
-
-  // Suggest scope from branch name (e.g. feat/auth → "auth")
   const branchScope = getScopeFromBranch();
 
   try {
-    // File selection — skip for hook mode and amend (staging is caller's responsibility)
+    // File selection (skip for hook/amend — staging is caller's responsibility)
     let selectedFiles: string[] = ["."];
     if (!hookFile && !amend) {
       selectedFiles = await promptFileSelection();
@@ -522,14 +492,14 @@ export async function promptCommit(hookFile?: string, amend = false): Promise<vo
       }
     }
 
-    // Diff summary box — show after file selection, before prompts
+    // Diff summary box
     if (!hookFile && !amend) {
       const stats = getDiffNumstat();
       const changedFiles = getChangedFiles().filter(
-        (f) => selectedFiles[0] === "." || selectedFiles.includes(f.path)
+        f => selectedFiles[0] === "." || selectedFiles.includes(f.path)
       );
       if (changedFiles.length > 0) {
-        const lines = changedFiles.map((f) => {
+        const lines = changedFiles.map(f => {
           const stat = stats.get(f.path);
           const statStr = stat
             ? chalk.green(` +${stat.added}`) + chalk.dim("/") + chalk.red(`-${stat.deleted}`)
@@ -549,6 +519,26 @@ export async function promptCommit(hookFile?: string, amend = false): Promise<vo
       }
     }
 
+    // Show current commit message when amending so user knows what they're changing
+    if (amend) {
+      const currentMsg = getLastCommitMessage();
+      if (currentMsg) {
+        console.log(
+          boxen(chalk.white(currentMsg), {
+            padding: 0.5,
+            margin: { top: 0, bottom: 1, left: 0, right: 0 },
+            borderColor: "yellow",
+            borderStyle: "round",
+            title: "Amending",
+            titleAlignment: "center",
+          })
+        );
+      }
+    }
+
+    // Cancel hint — shown just before prompts begin
+    console.log(chalk.dim("  esc · ctrl+c to cancel\n"));
+
     // Step counter
     const totalSteps =
       1 +
@@ -560,121 +550,88 @@ export async function promptCommit(hookFile?: string, amend = false): Promise<vo
     let step = 0;
     const s = () => chalk.dim(`[${++step}/${totalSteps}] `);
 
-    // Recent scopes for autocomplete hint
     const recentScopes = getRecentScopes();
-    const scopeHint = recentScopes.length > 0
-      ? chalk.dim(` — recent: ${recentScopes.slice(0, 4).join(", ")}`)
-      : "";
 
-    // Build questions array based on config
-    const questions: any[] = [
-      {
-        name: "type",
-        type: "list",
-        message: s() + (amend ? "Select new commit type:" : "Select commit type:"),
-        choices: [
-          ...getCommitTypes(),
-          ...(amend ? [] : [new inquirer.Separator(), { name: chalk.magenta("Generate with AI"), value: "ai_generate" }]),
-        ],
-        default: lastCommit?.type ?? undefined,
-        pageSize: 11,
-        theme: { helpMode: "never" },
-      },
-    ];
+    // ── Step 1: Type (AI option at top) ────────────────────────────────────
+    const { type } = await inquirer.prompt([{
+      name: "type",
+      type: "list",
+      message: s() + (amend ? "Select new commit type:" : "Select commit type:"),
+      choices: [
+        ...(amend ? [] : [
+          { name: chalk.magenta("✨ Generate with AI") + chalk.dim("  auto-generate from diff"), value: "ai_generate" },
+          new inquirer.Separator(),
+        ]),
+        ...getCommitTypes(),
+      ],
+      default: lastCommit?.type ?? undefined,
+      pageSize: 12,
+      theme: { helpMode: "never" },
+    }]);
 
-    // Conditionally add scope prompt
-    if (promptsConfig.scope) {
-      questions.push({
-        name: "scope",
-        type: "input",
-        message: s() + `Scope (optional)${scopeHint}:`,
-        when: (a: any) => a.type !== "ai_generate",
-        default: lastCommit?.scope || branchScope || undefined,
-        filter: (input: string) => input.trim(),
-      });
+    if (type === "ai_generate") {
+      return runAiCommitFlow(hookFile);
     }
 
-    // Always add message prompt (required)
-    questions.push({
+    // ── Step 2: Scope (list of recent + custom option) ──────────────────────
+    let scope = "";
+    if (promptsConfig.scope) {
+      scope = await promptScopeList(s(), recentScopes, branchScope, lastCommit?.scope);
+    }
+
+    // ── Step 3+: Message, body, breaking changes, issues ───────────────────
+    const remainingQuestions: any[] = [{
       name: "message",
       type: "spellcheck" as any,
       message: s() + "Commit message:",
       default: lastCommit?.message ?? undefined,
       charLimit: 72,
-      when: (a: any) => a.type !== "ai_generate",
       validate: (input: string) => {
-        if (input.trim().length < 1) {
-          return "Please enter a commit message.";
-        }
-        if (input.trim().length > 72) {
-          return "Keep the first line under 72 characters.";
-        }
+        if (input.trim().length < 1) return "Please enter a commit message.";
+        if (input.trim().length > 72) return "Keep the first line under 72 characters.";
         return true;
       },
       filter: (input: string) => input.trim(),
-    });
+    }];
 
-    // Conditionally add body prompt
     if (promptsConfig.body) {
-      questions.push({
+      remainingQuestions.push({
         name: "body",
         type: "spellcheck" as any,
         message: s() + "Longer description (optional):",
-        when: (a: any) => a.type !== "ai_generate",
         filter: (input: string) => input.trim(),
       });
     }
 
-    // Conditionally add breaking changes prompt
     if (promptsConfig.breaking) {
-      questions.push({
+      remainingQuestions.push({
         name: "breaking",
         type: "confirm",
         message: s() + "Are there any breaking changes?",
-        when: (a: any) => a.type !== "ai_generate",
         default: false,
       });
     }
 
-    // Conditionally add issues prompt
     if (promptsConfig.issues) {
-      questions.push({
+      remainingQuestions.push({
         name: "issues",
         type: "input",
         message: s() + 'Issue references (e.g., "fixes #123"):',
-        when: (a: any) => a.type !== "ai_generate",
         filter: (input: string) => input.trim(),
       });
     }
 
-    // Prompt user with configured questions
-    let answers = await inquirer.prompt(questions);
+    const answers = await inquirer.prompt(remainingQuestions);
 
-    // If user selected AI generation from the list — same flow as `gitclean ai`
-    if (answers.type === "ai_generate") {
-      return runAiCommitFlow(hookFile);
-    }
-
-    // Find the selected commit type from config
-    const selectedType = getCommitTypeConfig(answers.type);
-
-    // Build the commit message parts
+    // ── Build commit message ────────────────────────────────────────────────
+    const selectedType = getCommitTypeConfig(type);
     const breakingPrefix = answers.breaking ? "!" : "";
-    const scope = answers.scope ? `(${answers.scope})` : "";
-    const commitHeader = `${answers.type}${scope}${breakingPrefix}: ${answers.message}`;
+    const scopePart = scope ? `(${scope})` : "";
+    const commitHeader = `${type}${scopePart}${breakingPrefix}: ${answers.message}`;
 
-    // Format the full commit message for display
-    const formattedCommit = formatCommitMessage(
-      selectedType,
-      commitHeader,
-      answers.body,
-      answers.breaking,
-      answers.issues
-    );
-
-    // Display the final commit message
+    // Show formatted summary
     console.log(
-      boxen(formattedCommit, {
+      boxen(formatCommitMessage(selectedType, commitHeader, answers.body, answers.breaking, answers.issues), {
         padding: 0.5,
         margin: 0.5,
         borderColor: selectedType.color,
@@ -684,74 +641,38 @@ export async function promptCommit(hookFile?: string, amend = false): Promise<vo
       })
     );
 
-    // Build the actual commit message for git
     let fullCommit = commitHeader;
-    if (answers.body) {
-      fullCommit += `\n\n${answers.body}`;
-    }
-    if (answers.breaking) {
-      fullCommit += `\n\nBREAKING CHANGE: ${answers.message}`;
-    }
-    if (answers.issues) {
-      fullCommit += `\n\n${answers.issues}`;
-    }
+    if (answers.body) fullCommit += `\n\n${answers.body}`;
+    if (answers.breaking) fullCommit += `\n\nBREAKING CHANGE: ${answers.message}`;
+    if (answers.issues) fullCommit += `\n\n${answers.issues}`;
 
-    // Final confirmation
-    const { confirm } = await inquirer.prompt([
-      {
-        name: "confirm",
-        type: "confirm",
-        message: "Ready to commit?",
-        default: true,
-      },
-    ]);
-
-    if (confirm) {
-      if (hookFile) {
-        writeFileSync(hookFile, fullCommit);
-        console.log(
-          boxen(chalk.green("Commit message created successfully!"), {
-            padding: 0.5,
-            margin: 0.5,
-            borderColor: "green",
-            borderStyle: "round",
-          })
-        );
-      } else {
-        try {
-          if (amend) {
-            await executeGitAmend(fullCommit);
-          } else {
-            await executeFullGitWorkflow(fullCommit, selectedFiles);
-          }
-        } catch (error) {
-          console.error(
-            boxen(chalk.red(`Failed to ${amend ? "amend" : "complete git workflow"}`), {
-              padding: 0.5,
-              margin: 0.5,
-              borderColor: "red",
-              borderStyle: "round",
-            })
-          );
-          process.exit(1);
-        }
-      }
-    } else {
+    // ── Commit (no confirmation prompt) ────────────────────────────────────
+    if (hookFile) {
+      writeFileSync(hookFile, fullCommit);
       console.log(
-        boxen(chalk.yellow("Operation cancelled"), {
-          padding: 0.5,
-          margin: 0.5,
-          borderColor: "yellow",
-          borderStyle: "round",
+        boxen(chalk.green("Commit message created successfully!"), {
+          padding: 0.5, margin: 0.5, borderColor: "green", borderStyle: "round",
         })
       );
-      process.exit(1);
+    } else {
+      try {
+        if (amend) {
+          await executeGitAmend(fullCommit);
+        } else {
+          await executeFullGitWorkflow(fullCommit, selectedFiles);
+        }
+      } catch {
+        console.error(
+          boxen(chalk.red(`Failed to ${amend ? "amend" : "complete git workflow"}`), {
+            padding: 0.5, margin: 0.5, borderColor: "red", borderStyle: "round",
+          })
+        );
+        process.exit(1);
+      }
     }
   } catch (error) {
     if (error && typeof error === "object" && "name" in error) {
-      if ((error as any).name === "ExitPromptError") {
-        handleEscapeKey();
-      }
+      if ((error as any).name === "ExitPromptError") handleEscapeKey();
     }
     throw error;
   } finally {

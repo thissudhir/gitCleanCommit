@@ -1,4 +1,4 @@
-import { execSync, spawnSync } from "child_process";
+import { execSync } from "child_process";
 import { OpenAI } from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import Anthropic from "@anthropic-ai/sdk";
@@ -65,12 +65,6 @@ export class AiGenerator {
   public static async generateCommitMessage(files: string[] = ["."], hint?: string): Promise<string> {
     const config = loadConfig();
 
-    try {
-      spawnSync("git", ["add", "--", ...files], { stdio: "ignore" });
-    } catch {
-      // not in a git repo or nothing to add
-    }
-
     const diff = await this.getStagedDiff();
     if (!diff) {
       throw new Error("No staged changes found. Use 'git add' to stage files before generating a message.");
@@ -98,9 +92,9 @@ export class AiGenerator {
       const message = await this.withRetry(
         () => {
           if (provider === "gemini") {
-            return this.generateWithGemini(prompt, apiKey!, model || "gemini-1.5-flash");
+            return this.generateWithGemini(prompt, apiKey!, model || "gemini-2.0-flash");
           } else if (provider === "anthropic") {
-            return this.generateWithAnthropic(prompt, apiKey!, model || "claude-3-5-haiku-20241022");
+            return this.generateWithAnthropic(prompt, apiKey!, model || "claude-haiku-4-5-20251001");
           } else {
             return this.generateWithOpenAICompatible(prompt, apiKey || "ollama", provider, model, config.ai?.baseURL);
           }
@@ -119,9 +113,9 @@ export class AiGenerator {
       const shortened = await this.withRetry(
         () => {
           if (provider === "gemini") {
-            return this.generateWithGemini(shortenPrompt, apiKey!, model || "gemini-1.5-flash");
+            return this.generateWithGemini(shortenPrompt, apiKey!, model || "gemini-2.0-flash");
           } else if (provider === "anthropic") {
-            return this.generateWithAnthropic(shortenPrompt, apiKey!, model || "claude-3-5-haiku-20241022");
+            return this.generateWithAnthropic(shortenPrompt, apiKey!, model || "claude-haiku-4-5-20251001");
           } else {
             return this.generateWithOpenAICompatible(shortenPrompt, apiKey || "ollama", provider, model, config.ai?.baseURL);
           }
@@ -130,7 +124,9 @@ export class AiGenerator {
       );
       spinner.succeed("AI generation successful!");
       const shortCleaned = shortened.trim().replace(/^['"`]|['"`]$/g, "").split("\n")[0].trim();
-      return shortCleaned.length <= 72 ? shortCleaned : shortCleaned.slice(0, shortCleaned.lastIndexOf(" ", 72) || 72);
+      if (shortCleaned.length <= 72) return shortCleaned;
+      const cut = shortCleaned.lastIndexOf(" ", 72);
+      return shortCleaned.slice(0, cut > 0 ? cut : 72);
     } catch (error) {
       spinner.fail("AI generation failed");
       if (error instanceof Error) {
@@ -187,11 +183,14 @@ export class AiGenerator {
   }
 
   private static buildPrompt(diff: string, context: GitContext, hint?: string): string {
-    const contextSection = `\nBranch: ${context.branch}\n`;
+    const recentSection = context.recentCommits
+      ? `\nRecent commits (match this style):\n${context.recentCommits}\n`
+      : "";
     const hintSection = hint ? `\nAdditional focus: ${hint}\n` : "";
 
     return `Generate a clean, conventional commit message for the following git diff.
-${contextSection}
+
+Branch: ${context.branch}${recentSection}
 Git Diff:
 ${diff}
 ${hintSection}
@@ -202,8 +201,9 @@ Instructions:
 1. Use ONLY the types listed above (all caps).
 2. Scope is optional but recommended — infer it from the changed files.
 3. Message must be present tense, concise, and descriptive.
-4. Output ONLY a single line under 65 characters — no body, no bullet points, no newlines.
-5. Output ONLY the commit message string, nothing else.`;
+4. Match the tone and style of the recent commits shown above if provided.
+5. Output ONLY a single line under 65 characters — no body, no bullet points, no newlines.
+6. Output ONLY the commit message string, nothing else.`;
   }
 
   private static async generateWithGemini(

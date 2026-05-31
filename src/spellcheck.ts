@@ -109,7 +109,6 @@ export class GitCleanSpellChecker {
     "tls",
     "nginx",
     "apache",
-    "kubernetes",
     "helm",
     "terraform",
     "ansible",
@@ -164,9 +163,7 @@ export class GitCleanSpellChecker {
     "mvc",
     "mvp",
     "mvvm",
-    "api",
     "sdk",
-    "cli",
     "gui",
     "microservice",
 
@@ -239,7 +236,6 @@ export class GitCleanSpellChecker {
 
     // Common abbreviations
     "app",
-    "db",
     "auth",
     "util",
     "utils",

@@ -237,8 +237,7 @@ export async function executeFullGitWorkflow(
 
     const info = getLastCommitInfo();
     const hashTag = info.hash ? chalk.dim(" [") + chalk.cyan(info.hash) + chalk.dim("]") : "";
-    console.log(chalk.green("\nGitClean workflow completed!") + hashTag);
-    console.log(chalk.dim(`  branch: ${info.branch}`) + (info.subject ? chalk.dim(`  ·  ${info.subject}`) : "") + "\n");
+    console.log(chalk.green("\n  workflow complete") + chalk.dim("  ·  branch: " + info.branch) + hashTag + "\n");
   } catch (error) {
     console.error(
       chalk.red("\nGitClean workflow failed:"),
@@ -338,7 +337,7 @@ export function getDiffNumstat(): Map<string, { added: number; deleted: number }
         const file = parts[2];
         if (!isNaN(added) && !isNaN(deleted) && file) {
           const prev = result.get(file) ?? { added: 0, deleted: 0 };
-          result.set(file, { added: Math.max(prev.added, added), deleted: Math.max(prev.deleted, deleted) });
+          result.set(file, { added: prev.added + added, deleted: prev.deleted + deleted });
         }
       }
     } catch { /* ignore */ }

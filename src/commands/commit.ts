@@ -3,6 +3,7 @@ import { showBanner } from "../banner.js";
 import { promptCommit, runAiCommitFlow } from "../prompt.js";
 import { getGitStatus } from "../git-integration.js";
 import chalk from "chalk";
+import boxen from "boxen";
 
 export function registerCommitCommands(program: Command): void {
   program
@@ -11,7 +12,7 @@ export function registerCommitCommands(program: Command): void {
     .option("--hook <file>", "Hook mode: write to commit message file")
     .option("--amend", "Amend the last commit message")
     .action(async (options) => {
-      if (!options.amend) showBanner();
+      if (!options.amend && !options.hook) showBanner();
       await promptCommit(options.hook, options.amend ?? false);
     });
 
@@ -44,13 +45,23 @@ export function registerDefaultAction(program: Command): void {
 
     const status = getGitStatus();
     if (!status.trim()) {
-      console.log(chalk.yellow("No changes to commit"));
-      console.log(chalk.dim("Make some changes and run `gitclean` again"));
-      console.log(chalk.dim("\nTry these commands:"));
-      console.log(chalk.dim('• gitclean spellcheck "your text" - Test spell checker'));
-      console.log(chalk.dim("• gitclean test - Run spell checker tests"));
-      console.log(chalk.dim("• gitclean setup - Install git hooks"));
-      console.log(chalk.dim("• gitclean config init - Create config file"));
+      console.log(
+        boxen(
+          chalk.yellow("Nothing to commit") + "\n\n" +
+          chalk.dim("Make some changes and run ") + chalk.white("`gitclean`") + chalk.dim(" again.\n\n") +
+          chalk.dim('• gitclean spellcheck "text"') + chalk.dim("   test spell checker\n") +
+          chalk.dim("• gitclean setup             ") + chalk.dim("install git hooks\n") +
+          chalk.dim("• gitclean config init       ") + chalk.dim("create config file"),
+          {
+            padding: 0.5,
+            margin: { top: 0, bottom: 1, left: 0, right: 0 },
+            borderColor: "yellow",
+            borderStyle: "round",
+            title: "Working directory clean",
+            titleAlignment: "center",
+          }
+        )
+      );
       return;
     }
 
